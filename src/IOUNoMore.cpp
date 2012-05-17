@@ -43,9 +43,14 @@ int main() {
 	vector<double> vdProbabilitiesCumulative1;
 	vector<double> vdProbabilities2;		//probabilities for average amount of each IOU per account
 	vector<double> vdProbabilitiesCumulative2;
+	vector<double> vdProbabilities3;		//probabilities for random ammount per IOU
+	vector<double> vdProbabilitiesCumulative3;
+
+
 
 	double cumulativeProbability1 = 0.0;
 	double cumulativeProbability2 = 0.0;
+
 	for(int i = 0; i < nStatisticGroups; i++){
 		double probability1 = GaussianDistribution((double) i/nStatisticGroups, 0.2, 0.3);
 		vdProbabilities1.push_back(probability1);
@@ -79,7 +84,12 @@ int main() {
 		dRandom2 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability2 ;
 		for(unsigned int i = 0; i < vdProbabilitiesCumulative2.size()-1; i++){
 			if(vdProbabilitiesCumulative2.at(i) <= dRandom2 && vdProbabilitiesCumulative2.at(i+1) >= dRandom2 ){
-				ss << i+1 ;
+				ss << i+1 << ";";
+				float fMedian = i+1;
+				float fSigma = 3.0;
+				ss << box_muller(fMedian, fSigma) ;
+
+
 				break;
 			}
 		}
