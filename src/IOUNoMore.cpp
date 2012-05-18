@@ -5,6 +5,7 @@
 // Copyright   : This code is intended as a proof-of-concept for a website that uses a network of IOU's and tries to cancel out as much IOU's as possible.
 // Description : Hello World in C++, Ansi-style
 //============================================================================
+#include <stdio.h>
 #include <cstdlib> // for rand() and srand()
 #include <ctime> // for time()
 #include <math.h>
@@ -45,22 +46,36 @@ int main() {
 	vector<double> vdProbabilitiesCumulative2;
 	vector<double> vdProbabilities3;		//probabilities for random ammount per IOU
 	vector<double> vdProbabilitiesCumulative3;
+	vector<double> vdProbabilities4;		//probabilities for random ammount per IOU
+	vector<double> vdProbabilitiesCumulative4;
 
 
 
 	double cumulativeProbability1 = 0.0;
 	double cumulativeProbability2 = 0.0;
+	double cumulativeProbability3 = 0.0;
+	double cumulativeProbability4 = 0.0;
 
 	for(int i = 0; i < nStatisticGroups; i++){
 		double probability1 = GaussianDistribution((double) i/nStatisticGroups, 0.2, 0.3);
 		vdProbabilities1.push_back(probability1);
 		double probability2 = GaussianDistribution((double) i/nStatisticGroups, 0.5, 0.1);
 		vdProbabilities2.push_back(probability2);
+		double probability3 = GaussianDistribution((double) i/nStatisticGroups, 0.2, 0.3);
+		vdProbabilities3.push_back(probability3);
+		double probability4 = GaussianDistribution((double) i/nStatisticGroups, 0.5, 0.1);
+		vdProbabilities4.push_back(probability4);
+
 
 		vdProbabilitiesCumulative1.push_back(cumulativeProbability1);
 		cumulativeProbability1 += probability1;
 		vdProbabilitiesCumulative2.push_back(cumulativeProbability2);
 		cumulativeProbability2 += probability2;
+		vdProbabilitiesCumulative3.push_back(cumulativeProbability3);
+		cumulativeProbability3 += probability3;
+		vdProbabilitiesCumulative4.push_back(cumulativeProbability4);
+		cumulativeProbability4 += probability4;
+
 	}
 
 	int nLow = 0;
@@ -68,6 +83,8 @@ int main() {
 
 	double dRandom1;
 	double dRandom2;
+	double dRandom3;
+	double dRandom4;
 
 	for(int i = 0; i < nDebts; i++){
 
@@ -87,12 +104,36 @@ int main() {
 				ss << i+1 << ";";
 				float fMedian = i+1;
 				float fSigma = 3.0;
-				ss << box_muller(fMedian, fSigma) ;
+				float fAmount = box_muller(fMedian, fSigma);
+
+				if(fAmount < 0)
+					fAmount = fAmount * -1;
+
+				ss << fAmount << ";" ;
 
 
 				break;
 			}
 		}
+
+		dRandom3 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability3 ;
+		for(unsigned int i = 0; i < vdProbabilitiesCumulative3.size()-1; i++){
+			if(vdProbabilitiesCumulative3.at(i) <= dRandom3 && vdProbabilitiesCumulative3.at(i+1) >= dRandom3 ){
+				ss << i+1 << "_" ;
+				break;
+			}
+		}
+
+		dRandom4 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability4 ;
+		for(unsigned int i = 0; i < vdProbabilitiesCumulative4.size()-1; i++){
+			if(vdProbabilitiesCumulative4.at(i) <= dRandom4 && vdProbabilitiesCumulative4.at(i+1) >= dRandom4 ){
+				ss << i+1 << ";";
+
+				break;
+			}
+		}
+
+
 
 		output << ss.str() << endl;
 
