@@ -17,6 +17,9 @@
 
 using namespace std;
 
+void addNode(string ID, string label );
+
+
 float ranf();
 float box_muller(float m, float s);
 
@@ -139,10 +142,26 @@ int main() {
 
 	}
 
+	string strCommand("curl 'http://localhost:8080/workspace0?operation=updateGraph' -d '{\"an\":{\"A\":{\"label\":\"Streaming Node A\"}}}'");
+
+    system(strCommand.c_str());
+
+    string strID = "B";
+    string strLabel = "label B";
+
+    addNode(strID, strLabel);
+
 	return 0;
 }
 
+void addNode(string ID, string label ){
+	stringstream ss;
 
+	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
+	ss << "'{\"an\":{\"" << ID << "\":{\"label\":\"" << label << "\"}}}'";
+	system(ss.str().c_str());
+
+}
 
 /***************************************************************************************************************
 boxmuller.c Implements the Polar form of the Box-Muller
