@@ -19,7 +19,8 @@ using namespace std;
 
 void addNode(string ID, string label, float size );
 void addEdge(string ID, string source, string target, float weight );
-
+void changeNode(string ID, string label, float size );
+//void changeEdge(string ID, string source, string target, float weight );
 void deleteNode(string ID);
 void deleteEdge(string ID);
 
@@ -99,6 +100,8 @@ int main() {
 		stringstream ssAmount;
 		stringstream ssTarget;
 
+		float fAmount = 0.0;
+
 		dRandom1 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability1 ;
 		for(unsigned int i = 0; i < vdProbabilitiesCumulative1.size()-1; i++){
 			if(vdProbabilitiesCumulative1.at(i) <= dRandom1 && vdProbabilitiesCumulative1.at(i+1) >= dRandom1 ){
@@ -115,7 +118,7 @@ int main() {
 				ssSource << i+1;
 				float fMedian = i+1;
 				float fSigma = 3.0;
-				float fAmount = box_muller(fMedian, fSigma);
+				fAmount = box_muller(fMedian, fSigma);
 
 				if(fAmount < 0)
 					fAmount = fAmount * -1;
@@ -150,8 +153,14 @@ int main() {
 		addNode(ssTarget.str(), ssTarget.str(), 5.0);
 
 		string strEdgeID = ssSource.str() + "-" + ssTarget.str();
-		addEdge(strEdgeID, ssSource.str(), ssTarget.str(), 2.0);
+		addEdge(strEdgeID, ssSource.str(), ssTarget.str(), fAmount);
+
+
+
+
 		output << ss.str() << endl;
+
+
 
 	}
 
@@ -171,7 +180,7 @@ void addNode(string ID, string label, float size = 1 ){
 	stringstream ss;
 
 	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"an\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":\"" << size << "\"}}}'";
+	ss << "'{\"an\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}'";
 	system(ss.str().c_str());
 
 }
@@ -180,11 +189,28 @@ void addEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
 	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":\"" << weight << "\"}}}'";
+	ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << "}}}'";
 	system(ss.str().c_str());
 
 }
 
+void changeNode(string ID, string label, float size = 1 ){
+	stringstream ss;
+
+	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
+	ss << "'{\"cn\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}'";
+	system(ss.str().c_str());
+
+}
+
+void changeEdge(string ID, float weight = 1 ){
+	stringstream ss;
+
+	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
+	ss << "'{\"ce\":{\"" << ID << "\":{\"weight\":" << weight << "}}}'";
+	system(ss.str().c_str());
+
+}
 
 void deleteNode(string ID){
 	stringstream ss;
