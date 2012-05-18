@@ -18,6 +18,7 @@
 using namespace std;
 
 void addNode(string ID, string label );
+void addEdge(string ID, string source, string target );
 
 
 float ranf();
@@ -39,8 +40,8 @@ int main() {
 	std::string strOutputFileName = "output.txt";
 	std::ofstream output(strOutputFileName.c_str());
 
-	int nDebts = 60000;    				//total number of debts
-	int nStatisticGroups = 100; 		//number of groups for statistical purposes
+	int nDebts = 100;    				//total number of debts
+	int nStatisticGroups = 10; 		//number of groups for statistical purposes
 
 
 	vector<double> vdProbabilities1;		//probabilities for total number of IOU's
@@ -92,11 +93,15 @@ int main() {
 	for(int i = 0; i < nDebts; i++){
 
 		stringstream ss;
+		stringstream ssSource;
+		stringstream ssAmount;
+		stringstream ssTarget;
 
 		dRandom1 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability1 ;
 		for(unsigned int i = 0; i < vdProbabilitiesCumulative1.size()-1; i++){
 			if(vdProbabilitiesCumulative1.at(i) <= dRandom1 && vdProbabilitiesCumulative1.at(i+1) >= dRandom1 ){
 				ss << i+1 << "_" ;
+				ssSource << i+1 << "_" ;
 				break;
 			}
 		}
@@ -105,6 +110,7 @@ int main() {
 		for(unsigned int i = 0; i < vdProbabilitiesCumulative2.size()-1; i++){
 			if(vdProbabilitiesCumulative2.at(i) <= dRandom2 && vdProbabilitiesCumulative2.at(i+1) >= dRandom2 ){
 				ss << i+1 << ";";
+				ssSource << i+1;
 				float fMedian = i+1;
 				float fSigma = 3.0;
 				float fAmount = box_muller(fMedian, fSigma);
@@ -113,7 +119,7 @@ int main() {
 					fAmount = fAmount * -1;
 
 				ss << fAmount << ";" ;
-
+				ssAmount << fAmount ;
 
 				break;
 			}
@@ -123,6 +129,7 @@ int main() {
 		for(unsigned int i = 0; i < vdProbabilitiesCumulative3.size()-1; i++){
 			if(vdProbabilitiesCumulative3.at(i) <= dRandom3 && vdProbabilitiesCumulative3.at(i+1) >= dRandom3 ){
 				ss << i+1 << "_" ;
+				ssTarget << i+1 << "_" ;
 				break;
 			}
 		}
@@ -131,26 +138,30 @@ int main() {
 		for(unsigned int i = 0; i < vdProbabilitiesCumulative4.size()-1; i++){
 			if(vdProbabilitiesCumulative4.at(i) <= dRandom4 && vdProbabilitiesCumulative4.at(i+1) >= dRandom4 ){
 				ss << i+1 << ";";
-
+				ssTarget << i+1 ;
 				break;
 			}
 		}
 
 
+		addNode(ssSource.str(), ssSource.str());
+		addNode(ssTarget.str(), ssTarget.str());
 
+		string strEdgeID = ssSource.str() + "-" + ssTarget.str();
+		addEdge(strEdgeID, ssSource.str(), ssTarget.str());
 		output << ss.str() << endl;
 
 	}
 
-	string strCommand("curl 'http://localhost:8080/workspace0?operation=updateGraph' -d '{\"an\":{\"A\":{\"label\":\"Streaming Node A\"}}}'");
+	//string strCommand("curl 'http://localhost:8080/workspace0?operation=updateGraph' -d '{\"an\":{\"A\":{\"label\":\"Streaming Node A\"}}}'");
 
-    system(strCommand.c_str());
+    //system(strCommand.c_str());
 
-    string strID = "B";
+    /*string strID = "B";
     string strLabel = "label B";
 
     addNode(strID, strLabel);
-
+*/
 	return 0;
 }
 
@@ -159,6 +170,15 @@ void addNode(string ID, string label ){
 
 	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
 	ss << "'{\"an\":{\"" << ID << "\":{\"label\":\"" << label << "\"}}}'";
+	system(ss.str().c_str());
+
+}
+
+void addEdge(string ID, string source, string target ){
+	stringstream ss;
+
+	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
+	ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true}}}'";
 	system(ss.str().c_str());
 
 }
