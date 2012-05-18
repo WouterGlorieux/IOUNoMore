@@ -17,9 +17,11 @@
 
 using namespace std;
 
-void addNode(string ID, string label );
-void addEdge(string ID, string source, string target );
+void addNode(string ID, string label, float size );
+void addEdge(string ID, string source, string target, float weight );
 
+void deleteNode(string ID);
+void deleteEdge(string ID);
 
 float ranf();
 float box_muller(float m, float s);
@@ -144,11 +146,11 @@ int main() {
 		}
 
 
-		addNode(ssSource.str(), ssSource.str());
-		addNode(ssTarget.str(), ssTarget.str());
+		addNode(ssSource.str(), ssSource.str(), 5.0);
+		addNode(ssTarget.str(), ssTarget.str(), 5.0);
 
 		string strEdgeID = ssSource.str() + "-" + ssTarget.str();
-		addEdge(strEdgeID, ssSource.str(), ssTarget.str());
+		addEdge(strEdgeID, ssSource.str(), ssTarget.str(), 2.0);
 		output << ss.str() << endl;
 
 	}
@@ -165,22 +167,38 @@ int main() {
 	return 0;
 }
 
-void addNode(string ID, string label ){
+void addNode(string ID, string label, float size = 1 ){
 	stringstream ss;
 
 	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"an\":{\"" << ID << "\":{\"label\":\"" << label << "\"}}}'";
+	ss << "'{\"an\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":\"" << size << "\"}}}'";
 	system(ss.str().c_str());
 
 }
 
-void addEdge(string ID, string source, string target ){
+void addEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
 	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true}}}'";
+	ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":\"" << weight << "\"}}}'";
 	system(ss.str().c_str());
 
+}
+
+
+void deleteNode(string ID){
+	stringstream ss;
+
+	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
+	ss << "'{\"dn\":{\"" << ID << "\":{}}}'";
+	system(ss.str().c_str());
+}
+void deleteEdge(string ID){
+	stringstream ss;
+
+	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
+	ss << "'{\"de\":{\"" << ID << "\":{}}}'";
+	system(ss.str().c_str());
 }
 
 /***************************************************************************************************************
