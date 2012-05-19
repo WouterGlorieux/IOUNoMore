@@ -18,6 +18,8 @@
 
 using namespace std;
 
+
+
 void addNode(string ID, string label, float size );
 void addEdge(string ID, string source, string target, float weight );
 void changeNode(string ID, string label, float size );
@@ -38,10 +40,12 @@ double GaussianDistribution(double x, double mu, double sigma){
 
 class IOU{
 public:
+	string m_strSourceID;
 	string m_strTargetID;
 	float m_fAmount;
 
-	IOU(string targetID, float amount){
+	IOU(string sourceID, string targetID, float amount){
+		m_strSourceID = sourceID;
 		m_strTargetID = targetID;
 		m_fAmount = amount;
 	}
@@ -61,10 +65,15 @@ public:
 	float getAmount(){ return m_fAmount;}
 };
 
+class Account;
+
+map<string, Account> mapAccounts;
+
 class Account{
 public:
 	string m_ID;
-	multiset<IOU> m_setIOUs;
+	multiset<IOU> m_setIOUsDebet;
+	multiset<IOU> m_setIOUsCredit;
 	float m_fBalance;
 
 	Account(string ID){
@@ -73,22 +82,42 @@ public:
 	}
 	~Account(){}
 
-	void addIOU(IOU iou){
-		m_setIOUs.insert(iou);
-		m_fBalance += iou.getAmount();
-		addNode(iou.m_strTargetID, iou.m_strTargetID, 1.0);
+	void giveIOU(IOU iou){
+		m_setIOUsDebet.insert(iou);
+		m_fBalance -= iou.getAmount();
+
+		map<string, Account>::iterator it;
+		it = mapAccounts.find(iou.m_strTargetID);
+
+		if(it == mapAccounts.end()){
+			Account cAccount = Account(iou.m_strTargetID);
+			addNode(iou.m_strTargetID, iou.m_strTargetID, 1.0);
+			cAccount.receiveIOU(iou);
+			mapAccounts.insert(pair<string, Account>(iou.m_strTargetID, cAccount));
+
+		}
+		else{
+			it->second.receiveIOU(iou);
+		}
+
+
 		addEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, iou.m_fAmount);
 		changeNode(m_ID, m_ID, m_fBalance);
 
 	}
 
+	void receiveIOU(IOU iou){
+		m_setIOUsCredit.insert(iou);
+		m_fBalance += iou.getAmount();
+		changeNode(iou.m_strTargetID, iou.m_strTargetID, m_fBalance);
+	}
 	void deleteIOU(IOU iou){
 		m_fBalance -= iou.getAmount();
-		m_setIOUs.erase(iou);
+		m_setIOUsDebet.erase(iou);
 	}
 };
 
-map<string, Account> mapAccounts;
+
 
 
 int main() {
@@ -219,26 +248,17 @@ int main() {
 		if(it == mapAccounts.end()){
 			Account cAccount = Account(ssSource.str());
 			addNode(ssSource.str(), ssSource.str(), 1.0);
-			IOU cIOU = IOU(ssTarget.str(), fAmount);
-			cAccount.addIOU(cIOU);
+			IOU cIOU = IOU(ssSource.str(), ssTarget.str(), fAmount);
+			cAccount.giveIOU(cIOU);
 			mapAccounts.insert(pair<string, Account>(ssSource.str(), cAccount));
 
 		}
 		else{
 			Account cAccount = it->second;
-			IOU cIOU = IOU(ssTarget.str(), fAmount);
-			it->second.addIOU(cIOU);
+			IOU cIOU = IOU(ssSource.str(), ssTarget.str(), fAmount);
+			it->second.giveIOU(cIOU);
 
 		}
-
-
-
-
-
-
-
-
-
 
 		output << ss.str() << endl;
 
@@ -251,9 +271,14 @@ int main() {
 		Account cAccount = (*it).second;
 		cout << (*it).first << ": " << cAccount.m_fBalance << endl;
 		multiset<IOU>::iterator it2;
-		for ( it2 = cAccount.m_setIOUs.begin(); it2 != cAccount.m_setIOUs.end(); ++it2){
+		for ( it2 = cAccount.m_setIOUsDebet.begin(); it2 != cAccount.m_setIOUsDebet.end(); ++it2){
 			IOU cIOU = *it2;
-			cout << "\t" << cIOU.m_strTargetID << ": " << cIOU.m_fAmount << endl;
+			cout << "\tDebet: " << cIOU.m_strTargetID << ": " << cIOU.m_fAmount << endl;
+		}
+
+		for ( it2 = cAccount.m_setIOUsCredit.begin(); it2 != cAccount.m_setIOUsCredit.end(); ++it2){
+			IOU cIOU = *it2;
+			cout << "\tCredit: " << cIOU.m_strSourceID << ": " << cIOU.m_fAmount << endl;
 		}
 	}
 
