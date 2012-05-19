@@ -13,7 +13,8 @@
 #include <sstream>
 #include <fstream>
 #include <vector>
-
+#include <set>
+#include <map>
 
 using namespace std;
 
@@ -34,6 +35,60 @@ double GaussianDistribution(double x, double mu, double sigma){
 
 	return value;
 }
+
+class IOU{
+public:
+	string m_strTargetID;
+	float m_fAmount;
+
+	IOU(string targetID, float amount){
+		m_strTargetID = targetID;
+		m_fAmount = amount;
+	}
+	~IOU(){}
+
+	bool operator < (const IOU& refParam) const
+	{
+		if(this->m_strTargetID != refParam.m_strTargetID){
+			return (this->m_strTargetID < refParam.m_strTargetID);
+		}
+		else{
+			return (this->m_fAmount < refParam.m_fAmount);
+		}
+	}
+
+
+	float getAmount(){ return m_fAmount;}
+};
+
+class Account{
+public:
+	string m_ID;
+	multiset<IOU> m_setIOUs;
+	float m_fBalance;
+
+	Account(string ID){
+		m_ID = ID;
+		m_fBalance = 0.0;
+	}
+	~Account(){}
+
+	void addIOU(IOU iou){
+		m_setIOUs.insert(iou);
+		m_fBalance += iou.getAmount();
+		addNode(iou.m_strTargetID, iou.m_strTargetID, 1.0);
+		addEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, iou.m_fAmount);
+		changeNode(m_ID, m_ID, m_fBalance);
+
+	}
+
+	void deleteIOU(IOU iou){
+		m_fBalance -= iou.getAmount();
+		m_setIOUs.erase(iou);
+	}
+};
+
+map<string, Account> mapAccounts;
 
 
 int main() {
@@ -148,12 +203,39 @@ int main() {
 			}
 		}
 
-
+/*
 		addNode(ssSource.str(), ssSource.str(), 5.0);
 		addNode(ssTarget.str(), ssTarget.str(), 5.0);
+		changeNode(ssTarget.str(), ssTarget.str(), 50.0);
 
 		string strEdgeID = ssSource.str() + "-" + ssTarget.str();
 		addEdge(strEdgeID, ssSource.str(), ssTarget.str(), fAmount);
+*/
+
+		map<string, Account>::iterator it;
+		it = mapAccounts.find(ssSource.str());
+
+
+		if(it == mapAccounts.end()){
+			Account cAccount = Account(ssSource.str());
+			addNode(ssSource.str(), ssSource.str(), 1.0);
+			IOU cIOU = IOU(ssTarget.str(), fAmount);
+			cAccount.addIOU(cIOU);
+			mapAccounts.insert(pair<string, Account>(ssSource.str(), cAccount));
+
+		}
+		else{
+			Account cAccount = it->second;
+			IOU cIOU = IOU(ssTarget.str(), fAmount);
+			it->second.addIOU(cIOU);
+
+		}
+
+
+
+
+
+
 
 
 
@@ -164,15 +246,18 @@ int main() {
 
 	}
 
-	//string strCommand("curl 'http://localhost:8080/workspace0?operation=updateGraph' -d '{\"an\":{\"A\":{\"label\":\"Streaming Node A\"}}}'");
+	for( map<string,Account>::iterator it=mapAccounts.begin(); it!=mapAccounts.end(); ++it)
+	{
+		Account cAccount = (*it).second;
+		cout << (*it).first << ": " << cAccount.m_fBalance << endl;
+		multiset<IOU>::iterator it2;
+		for ( it2 = cAccount.m_setIOUs.begin(); it2 != cAccount.m_setIOUs.end(); ++it2){
+			IOU cIOU = *it2;
+			cout << "\t" << cIOU.m_strTargetID << ": " << cIOU.m_fAmount << endl;
+		}
+	}
 
-    //system(strCommand.c_str());
 
-    /*string strID = "B";
-    string strLabel = "label B";
-
-    addNode(strID, strLabel);
-*/
 	return 0;
 }
 
