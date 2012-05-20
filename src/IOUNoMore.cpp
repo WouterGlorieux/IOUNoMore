@@ -64,6 +64,7 @@ public:
 
 	float getAmount(){ return m_fAmount;}
 };
+IOU randomIOU();
 
 class Account;
 
@@ -96,7 +97,20 @@ public:
 
 		return fTotal;
 	}
+	float owedFrom(string source){
+			float fTotal = 0.0;
+			multiset<IOU>::iterator it;
 
+			for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
+			{
+	        	if(it->m_strSourceID == source){
+
+	        		fTotal += it->m_fAmount;
+	        	}
+			}
+
+			return fTotal;
+	}
 	void giveIOU(IOU iou){
 		m_setIOUsDebet.insert(iou);
 		m_fBalance -= iou.getAmount();
@@ -116,7 +130,14 @@ public:
 		}
 
 
-		addEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, owedTo(iou.m_strTargetID));
+		if(owedTo(iou.m_strTargetID)>0){
+			addEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, owedTo(iou.m_strTargetID));
+			changeEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, owedTo(iou.m_strTargetID));
+		}
+		else{
+			deleteEdge(m_ID + "-" + iou.m_strTargetID);
+		}
+
 		changeNode(m_ID, m_ID, m_fBalance);
 
 	}
@@ -124,6 +145,11 @@ public:
 	void receiveIOU(IOU iou){
 		m_setIOUsCredit.insert(iou);
 		m_fBalance += iou.getAmount();
+
+		if(owedFrom(iou.m_strSourceID)<=0){
+			deleteEdge(m_ID + "-" + iou.m_strTargetID);
+		}
+
 		changeNode(iou.m_strTargetID, iou.m_strTargetID, m_fBalance);
 	}
 	void deleteIOU(IOU iou){
@@ -132,7 +158,29 @@ public:
 	}
 };
 
+double dRandom1;
+double dRandom2;
+double dRandom3;
+double dRandom4;
 
+vector<double> vdProbabilities1;		//probabilities for total number of IOU's
+vector<double> vdProbabilitiesCumulative1;
+vector<double> vdProbabilities2;		//probabilities for average amount of each IOU per account
+vector<double> vdProbabilitiesCumulative2;
+vector<double> vdProbabilities3;		//probabilities for random ammount per IOU
+vector<double> vdProbabilitiesCumulative3;
+vector<double> vdProbabilities4;		//probabilities for random ammount per IOU
+vector<double> vdProbabilitiesCumulative4;
+
+
+
+double cumulativeProbability1 = 0.0;
+double cumulativeProbability2 = 0.0;
+double cumulativeProbability3 = 0.0;
+double cumulativeProbability4 = 0.0;
+
+int nLow = 0;
+int nHigh = RAND_MAX;
 
 
 int main() {
@@ -146,21 +194,6 @@ int main() {
 	int nStatisticGroups = 10; 		//number of groups for statistical purposes
 
 
-	vector<double> vdProbabilities1;		//probabilities for total number of IOU's
-	vector<double> vdProbabilitiesCumulative1;
-	vector<double> vdProbabilities2;		//probabilities for average amount of each IOU per account
-	vector<double> vdProbabilitiesCumulative2;
-	vector<double> vdProbabilities3;		//probabilities for random ammount per IOU
-	vector<double> vdProbabilitiesCumulative3;
-	vector<double> vdProbabilities4;		//probabilities for random ammount per IOU
-	vector<double> vdProbabilitiesCumulative4;
-
-
-
-	double cumulativeProbability1 = 0.0;
-	double cumulativeProbability2 = 0.0;
-	double cumulativeProbability3 = 0.0;
-	double cumulativeProbability4 = 0.0;
 
 	for(int i = 0; i < nStatisticGroups; i++){
 		double probability1 = GaussianDistribution((double) i/nStatisticGroups, 0.2, 0.3);
@@ -184,102 +217,35 @@ int main() {
 
 	}
 
-	int nLow = 0;
-	int nHigh = RAND_MAX;
 
-	double dRandom1;
-	double dRandom2;
-	double dRandom3;
-	double dRandom4;
 
 	for(int i = 0; i < nDebts; i++){
 
-		stringstream ss;
-		stringstream ssSource;
-		stringstream ssAmount;
-		stringstream ssTarget;
-
-		float fAmount = 0.0;
-
-		dRandom1 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability1 ;
-		for(unsigned int i = 0; i < vdProbabilitiesCumulative1.size()-1; i++){
-			if(vdProbabilitiesCumulative1.at(i) <= dRandom1 && vdProbabilitiesCumulative1.at(i+1) >= dRandom1 ){
-				ss << i+1 << "_" ;
-				ssSource << i+1 << "_" ;
-				break;
-			}
-		}
-
-		dRandom2 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability2 ;
-		for(unsigned int i = 0; i < vdProbabilitiesCumulative2.size()-1; i++){
-			if(vdProbabilitiesCumulative2.at(i) <= dRandom2 && vdProbabilitiesCumulative2.at(i+1) >= dRandom2 ){
-				ss << i+1 << ";";
-				ssSource << i+1;
-				float fMedian = i+1;
-				float fSigma = 3.0;
-				fAmount = box_muller(fMedian, fSigma);
-
-				if(fAmount < 0)
-					fAmount = fAmount * -1;
-
-				ss << fAmount << ";" ;
-				ssAmount << fAmount ;
-
-				break;
-			}
-		}
-
-		dRandom3 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability3 ;
-		for(unsigned int i = 0; i < vdProbabilitiesCumulative3.size()-1; i++){
-			if(vdProbabilitiesCumulative3.at(i) <= dRandom3 && vdProbabilitiesCumulative3.at(i+1) >= dRandom3 ){
-				ss << i+1 << "_" ;
-				ssTarget << i+1 << "_" ;
-				break;
-			}
-		}
-
-		dRandom4 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability4 ;
-		for(unsigned int i = 0; i < vdProbabilitiesCumulative4.size()-1; i++){
-			if(vdProbabilitiesCumulative4.at(i) <= dRandom4 && vdProbabilitiesCumulative4.at(i+1) >= dRandom4 ){
-				ss << i+1 << ";";
-				ssTarget << i+1 ;
-				break;
-			}
-		}
-
-/*
-		addNode(ssSource.str(), ssSource.str(), 5.0);
-		addNode(ssTarget.str(), ssTarget.str(), 5.0);
-		changeNode(ssTarget.str(), ssTarget.str(), 50.0);
-
-		string strEdgeID = ssSource.str() + "-" + ssTarget.str();
-		addEdge(strEdgeID, ssSource.str(), ssTarget.str(), fAmount);
-*/
-
+		IOU iou = randomIOU();
 		map<string, Account>::iterator it;
-		it = mapAccounts.find(ssSource.str());
+		it = mapAccounts.find(iou.m_strSourceID);
 
 
 		if(it == mapAccounts.end()){
-			Account cAccount = Account(ssSource.str());
-			addNode(ssSource.str(), ssSource.str(), 1.0);
-			IOU cIOU = IOU(ssSource.str(), ssTarget.str(), fAmount);
-			cAccount.giveIOU(cIOU);
-			mapAccounts.insert(pair<string, Account>(ssSource.str(), cAccount));
-
+			Account cAccount = Account(iou.m_strSourceID);
+			addNode(iou.m_strSourceID, iou.m_strSourceID, 1.0);
+			cAccount.giveIOU(iou);
+			mapAccounts.insert(pair<string, Account>(iou.m_strSourceID, cAccount));
 		}
 		else{
 			Account cAccount = it->second;
-			IOU cIOU = IOU(ssSource.str(), ssTarget.str(), fAmount);
-			it->second.giveIOU(cIOU);
-
+			it->second.giveIOU(iou);
 		}
 
-		output << ss.str() << endl;
+		output << iou.m_strSourceID << ";" << iou.m_fAmount << ";" << iou.m_strTargetID << endl;
 
 
 
 	}
+
+
+
+
 
 	for( map<string,Account>::iterator it=mapAccounts.begin(); it!=mapAccounts.end(); ++it)
 	{
@@ -299,6 +265,65 @@ int main() {
 
 
 	return 0;
+}
+
+IOU randomIOU(){
+	stringstream ss;
+	stringstream ssSource;
+	stringstream ssAmount;
+	stringstream ssTarget;
+
+	float fAmount = 0.0;
+
+	dRandom1 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability1 ;
+	for(unsigned int i = 0; i < vdProbabilitiesCumulative1.size()-1; i++){
+		if(vdProbabilitiesCumulative1.at(i) <= dRandom1 && vdProbabilitiesCumulative1.at(i+1) >= dRandom1 ){
+			ss << i+1 << "_" ;
+			ssSource << i+1 << "_" ;
+			break;
+		}
+	}
+
+	dRandom2 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability2 ;
+	for(unsigned int i = 0; i < vdProbabilitiesCumulative2.size()-1; i++){
+		if(vdProbabilitiesCumulative2.at(i) <= dRandom2 && vdProbabilitiesCumulative2.at(i+1) >= dRandom2 ){
+			ss << i+1 << ";";
+			ssSource << i+1;
+			float fMedian = i+1;
+			float fSigma = 3.0;
+			fAmount = box_muller(fMedian, fSigma);
+
+			if(fAmount < 0)
+				fAmount = fAmount * -1;
+
+			ss << fAmount << ";" ;
+			ssAmount << fAmount ;
+
+			break;
+		}
+	}
+
+	dRandom3 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability3 ;
+	for(unsigned int i = 0; i < vdProbabilitiesCumulative3.size()-1; i++){
+		if(vdProbabilitiesCumulative3.at(i) <= dRandom3 && vdProbabilitiesCumulative3.at(i+1) >= dRandom3 ){
+			ss << i+1 << "_" ;
+			ssTarget << i+1 << "_" ;
+			break;
+		}
+	}
+
+	dRandom4 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability4 ;
+	for(unsigned int i = 0; i < vdProbabilitiesCumulative4.size()-1; i++){
+		if(vdProbabilitiesCumulative4.at(i) <= dRandom4 && vdProbabilitiesCumulative4.at(i+1) >= dRandom4 ){
+			ss << i+1 << ";";
+			ssTarget << i+1 ;
+			break;
+		}
+	}
+
+	IOU iou = IOU(ssSource.str(), ssTarget.str(), fAmount);
+
+	return iou;
 }
 
 void addNode(string ID, string label, float size = 1 ){
