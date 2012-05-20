@@ -23,7 +23,7 @@ using namespace std;
 void addNode(string ID, string label, float size );
 void addEdge(string ID, string source, string target, float weight );
 void changeNode(string ID, string label, float size );
-//void changeEdge(string ID, string source, string target, float weight );
+void changeEdge(string ID, string source, string target, float weight );
 void deleteNode(string ID);
 void deleteEdge(string ID);
 
@@ -82,6 +82,21 @@ public:
 	}
 	~Account(){}
 
+	float owedTo(string target){
+		float fTotal = 0.0;
+		multiset<IOU>::iterator it;
+
+		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
+		{
+        	if(it->m_strTargetID == target){
+
+        		fTotal += it->m_fAmount;
+        	}
+		}
+
+		return fTotal;
+	}
+
 	void giveIOU(IOU iou){
 		m_setIOUsDebet.insert(iou);
 		m_fBalance -= iou.getAmount();
@@ -101,7 +116,7 @@ public:
 		}
 
 
-		addEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, iou.m_fAmount);
+		addEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, owedTo(iou.m_strTargetID));
 		changeNode(m_ID, m_ID, m_fBalance);
 
 	}
@@ -313,14 +328,15 @@ void changeNode(string ID, string label, float size = 1 ){
 
 }
 
-void changeEdge(string ID, float weight = 1 ){
+void changeEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
 	ss << "curl 'http://localhost:8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"ce\":{\"" << ID << "\":{\"weight\":" << weight << "}}}'";
+	ss << "'{\"ce\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << "}}}'";
 	system(ss.str().c_str());
 
 }
+
 
 void deleteNode(string ID){
 	stringstream ss;
