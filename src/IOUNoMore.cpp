@@ -26,6 +26,7 @@ void changeNode(string ID, string label, float size );
 void changeEdge(string ID, string source, string target, float weight );
 void deleteNode(string ID);
 void deleteEdge(string ID);
+void StringExplode(std::string str, std::string separator, std::vector<std::string>* results);
 
 float ranf();
 float box_muller(float m, float s);
@@ -190,7 +191,7 @@ int main() {
 	std::string strOutputFileName = "output.txt";
 	std::ofstream output(strOutputFileName.c_str());
 
-	int nDebts = 100;    				//total number of debts
+	//int nDebts = 100;    				//total number of debts
 	int nStatisticGroups = 10; 		//number of groups for statistical purposes
 
 
@@ -217,52 +218,76 @@ int main() {
 
 	}
 
+	string input;
+	vector<string> vstrData;
+	vstrData.push_back(string("initial value"));
 
 
-	for(int i = 0; i < nDebts; i++){
 
-		IOU iou = randomIOU();
-		map<string, Account>::iterator it;
-		it = mapAccounts.find(iou.m_strSourceID);
+	while(vstrData.at(0) != string("exit")){
+		cout << "enter IOU: source amount target" << endl;
+		getline(cin, input);
 
-
-		if(it == mapAccounts.end()){
-			Account cAccount = Account(iou.m_strSourceID);
-			addNode(iou.m_strSourceID, iou.m_strSourceID, 1.0);
-			cAccount.giveIOU(iou);
-			mapAccounts.insert(pair<string, Account>(iou.m_strSourceID, cAccount));
-		}
-		else{
-			Account cAccount = it->second;
-			it->second.giveIOU(iou);
+		if(input == ""){
+			continue;
 		}
 
-		output << iou.m_strSourceID << ";" << iou.m_fAmount << ";" << iou.m_strTargetID << endl;
+		vstrData.clear();
+		StringExplode(input, " ", &vstrData);
 
+		int nIOU = 0; // number of random iou's to generate
+		if(vstrData.at(0) == string("random")){
+			if(vstrData.size() >= 2){
+				nIOU = atoi(vstrData.at(1).c_str());
+			}
+		}
+		else if(vstrData.size() == 3){
+			nIOU = 1;
+		}
 
+		for(int i = 0; i < nIOU; i++){
+			IOU iou = IOU(string(""), string(""), 0);
+			if(vstrData.at(0) == string("random")){
+				iou = randomIOU();
+			}
+			else{
+				iou = IOU(vstrData.at(0), vstrData.at(2), atof(vstrData.at(1).c_str()));
+			}
 
+			map<string, Account>::iterator it;
+			it = mapAccounts.find(iou.m_strSourceID);
+
+			if(it == mapAccounts.end()){
+				Account cAccount = Account(iou.m_strSourceID);
+				addNode(iou.m_strSourceID, iou.m_strSourceID, 1.0);
+				cAccount.giveIOU(iou);
+				mapAccounts.insert(pair<string, Account>(iou.m_strSourceID, cAccount));
+			}
+			else{
+				Account cAccount = it->second;
+				it->second.giveIOU(iou);
+			}
+
+			output << iou.m_strSourceID << ";" << iou.m_fAmount << ";" << iou.m_strTargetID << endl;
+		}
 	}
 
-
-
-
-
+	//list all accounts with their balance
 	for( map<string,Account>::iterator it=mapAccounts.begin(); it!=mapAccounts.end(); ++it)
 	{
 		Account cAccount = (*it).second;
-		cout << (*it).first << ": " << cAccount.m_fBalance << endl;
+		cout << (*it).first << " balance: " << cAccount.m_fBalance << endl;
 		multiset<IOU>::iterator it2;
 		for ( it2 = cAccount.m_setIOUsDebet.begin(); it2 != cAccount.m_setIOUsDebet.end(); ++it2){
 			IOU cIOU = *it2;
-			cout << "\tDebet: " << cIOU.m_strTargetID << ": " << cIOU.m_fAmount << endl;
+			cout << "\tgiven to " << cIOU.m_strTargetID << ": " << cIOU.m_fAmount << endl;
 		}
 
 		for ( it2 = cAccount.m_setIOUsCredit.begin(); it2 != cAccount.m_setIOUsCredit.end(); ++it2){
 			IOU cIOU = *it2;
-			cout << "\tCredit: " << cIOU.m_strSourceID << ": " << cIOU.m_fAmount << endl;
+			cout << "\treceived from " << cIOU.m_strSourceID << ": " << cIOU.m_fAmount << endl;
 		}
 	}
-
 
 	return 0;
 }
@@ -378,6 +403,22 @@ void deleteEdge(string ID){
 	system(ss.str().c_str());
 }
 
+void StringExplode(std::string str, std::string separator, std::vector<std::string>* results){
+    std::size_t found;
+    found = str.find_first_of(separator);
+    while(found != std::string::npos){
+        if(found > 0){
+            results->push_back(str.substr(0,found));
+        }
+        str = str.substr(found+1);
+        found = str.find_first_of(separator);
+    }
+    if(str.length() > 0){
+        results->push_back(str);
+    }
+}
+
+
 /***************************************************************************************************************
 boxmuller.c Implements the Polar form of the Box-Muller
 Transformation
@@ -427,4 +468,6 @@ use_last = 1;
 
 return( m + y1 * s );
 }
+
+
 
