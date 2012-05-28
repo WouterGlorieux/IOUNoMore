@@ -15,11 +15,12 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <list>
+#include <algorithm>
 
 using namespace std;
 
 string strHost = string("192.168.1.100");
-string strGreen = string("[0,255,0]");
 
 
 
@@ -30,6 +31,7 @@ void changeEdge(string ID, string source, string target, float weight );
 void deleteNode(string ID);
 void deleteEdge(string ID);
 void StringExplode(std::string str, std::string separator, std::vector<std::string>* results);
+list<string> StronglyConnected(string v, string w, int maxDepth);
 
 float ranf();
 float box_muller(float m, float s);
@@ -97,6 +99,26 @@ public:
 	}
 	~Account(){}
 
+	vector<string> creditors(){
+		vector<string> vstrCreditors;
+		multiset<IOU>::iterator it;
+		string strTmpTarget = "";
+
+		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
+		{
+        	if(it->m_strTargetID != strTmpTarget){
+        		if(it->m_strTargetID == m_ID){
+        			cout << "wtf?" << endl;
+        			return vstrCreditors;
+        		}
+        		cout << "adding " << it->m_strTargetID << " to creditors" << endl;
+        		vstrCreditors.push_back(it->m_strTargetID);
+        		strTmpTarget = it->m_strTargetID;
+        	}
+		}
+		return vstrCreditors;
+	}
+
 	float owedTo(string target){
 		float fTotal = 0.0;
 		multiset<IOU>::iterator it;
@@ -152,6 +174,8 @@ public:
 		}
 
 		changeNode(m_ID, label(), m_fBalance);
+
+		cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 5).size() << endl;
 
 	}
 
@@ -237,7 +261,8 @@ int main() {
 		getline(cin, input);
 
 		if(input == ""){
-			continue;
+			//continue;
+			input = "random 1";
 		}
 
 		vstrData.clear();
@@ -263,6 +288,10 @@ int main() {
 			IOU iou = IOU(string(""), string(""), 0);
 			if(vstrData.at(0) == string("random")){
 				iou = randomIOU();
+				if(iou.m_strSourceID == iou.m_strTargetID){
+					cout << "source and target are the same.";
+					//exit(1);
+				}
 			}
 			else{
 				iou = IOU(vstrData.at(0), vstrData.at(2), atof(vstrData.at(1).c_str()));
@@ -356,6 +385,10 @@ IOU randomIOU(){
 		}
 	}
 
+	if(ssSource.str()==ssTarget.str()){
+		ssTarget.str(string("bad target"));
+	}
+
 	IOU iou = IOU(ssSource.str(), ssTarget.str(), fAmount);
 
 	return iou;
@@ -412,6 +445,88 @@ void deleteEdge(string ID){
 	ss << "'{\"de\":{\"" << ID << "\":{}}}'";
 	system(ss.str().c_str());
 }
+
+list<string> StronglyConnected(string v, string w, int maxDepth){
+	bool stronglyConnected = false;
+	list<string> listOpen;
+	list<string> listClosed;
+
+	listOpen.push_back(w);
+
+	string strNode = "";
+
+	map<string, Account>::iterator it;
+	while(listOpen.size()>0 && !stronglyConnected){
+		list<string>::const_iterator listIt;
+		cout << v << "->" << w << endl;
+		cout << "list open: " ;
+		for (listIt = listOpen.begin();  listIt != listOpen.end();  listIt++)
+		{
+			cout << *listIt << ", ";
+		}
+		cout << endl << "list closed: ";
+		for (listIt = listClosed.begin();  listIt != listClosed.end();  listIt++)
+		{
+			cout << *listIt << ", ";
+		}
+		cout << endl;
+
+
+		strNode = listOpen.front();
+		listOpen.pop_front();
+		cout << v << " open node: " << strNode << endl;
+		listClosed.push_back(strNode);
+
+		if(v != strNode){
+			cout << v << " not equal to " << strNode << endl;
+			it = mapAccounts.find(strNode);
+			vector<string> vstrCreditors;
+			vstrCreditors = it->second.creditors();
+			cout << strNode << " has " << vstrCreditors.size() << " creditors" << endl;
+			for(unsigned int i=0; i<vstrCreditors.size(); i++){
+				if(std::find(listClosed.begin(), listClosed.end(), vstrCreditors.at(i)) == listClosed.end()){
+					listOpen.push_back(vstrCreditors.at(i));
+				}
+
+			}
+		}
+		else{
+			stronglyConnected = true;
+			list<string>::const_iterator listIt;
+
+			/*for (listIt = listClosed.begin();  listIt != listClosed.end();  listIt++)
+			{
+				cout << *listIt << ", " ;
+				string nextInList;
+				nextInList = *++listIt;
+				cout << nextInList << endl;
+				listIt--;
+
+				it = mapAccounts.find(*listIt);
+				vector<string> vstrCreditors;
+				vstrCreditors = it->second.creditors();
+				//if(std::find(vstrCreditors.begin(), vstrCreditors.end(), *(listIt+1))!=vstrCreditors.end()){
+					//cout << "found " << *(listIt+1) << " among creditors of " << *listIt << endl;
+				//}
+
+
+
+			}*/
+			cout << endl;
+
+
+		}
+
+
+	}
+
+	if(!stronglyConnected){
+		listClosed.clear();
+	}
+
+	return listClosed;
+}
+
 
 void StringExplode(std::string str, std::string separator, std::vector<std::string>* results){
     std::size_t found;
