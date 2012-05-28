@@ -31,7 +31,7 @@ void changeEdge(string ID, string source, string target, float weight );
 void deleteNode(string ID);
 void deleteEdge(string ID);
 void StringExplode(std::string str, std::string separator, std::vector<std::string>* results);
-list<string> StronglyConnected(string v, string w, int maxDepth);
+list<string> StronglyConnected(string v, string w, int depth, int maxDepth);
 
 float ranf();
 float box_muller(float m, float s);
@@ -107,16 +107,28 @@ public:
 		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
 		{
         	if(it->m_strTargetID != strTmpTarget){
-        		if(it->m_strTargetID == m_ID){
-        			cout << "wtf?" << endl;
-        			return vstrCreditors;
-        		}
         		cout << "adding " << it->m_strTargetID << " to creditors" << endl;
         		vstrCreditors.push_back(it->m_strTargetID);
         		strTmpTarget = it->m_strTargetID;
         	}
 		}
 		return vstrCreditors;
+	}
+
+	vector<string> debtors(){
+		vector<string> vstrDebtors;
+		multiset<IOU>::iterator it;
+		string strTmpSource = "";
+
+		for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
+		{
+        	if(it->m_strSourceID != strTmpSource){
+        		cout << "adding " << it->m_strSourceID << " to debtors" << endl;
+        		vstrDebtors.push_back(it->m_strSourceID);
+        		strTmpSource = it->m_strSourceID;
+        	}
+		}
+		return vstrDebtors;
 	}
 
 	float owedTo(string target){
@@ -175,7 +187,7 @@ public:
 
 		changeNode(m_ID, label(), m_fBalance);
 
-		cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 5).size() << endl;
+		cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 0, 5).size() << endl;
 
 	}
 
@@ -254,7 +266,7 @@ int main() {
 	vector<string> vstrData;
 	vstrData.push_back(string("initial value"));
 
-
+	vector<IOU> vIOUdefault;
 
 	while(vstrData.at(0) != string("exit")){
 		cout << "enter IOU: source amount target" << endl;
@@ -276,6 +288,13 @@ int main() {
 				nIOU = atoi(vstrData.at(1).c_str());
 			}
 		}
+		else if(vstrData.at(0) == string("default")){
+			vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
+			vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
+			vIOUdefault.push_back(IOU(string("C"), string("A"), 1));
+
+			nIOU = vIOUdefault.size();
+		}
 		else if(vstrData.size() == 3){
 			nIOU = 1;
 			if(vstrData.at(0) == vstrData.at(2)){
@@ -292,6 +311,9 @@ int main() {
 					cout << "source and target are the same.";
 					//exit(1);
 				}
+			}
+			else if(vstrData.at(0) == string("default")){
+				iou = vIOUdefault.at(i);
 			}
 			else{
 				iou = IOU(vstrData.at(0), vstrData.at(2), atof(vstrData.at(1).c_str()));
@@ -446,10 +468,11 @@ void deleteEdge(string ID){
 	system(ss.str().c_str());
 }
 
-list<string> StronglyConnected(string v, string w, int maxDepth){
+list<string> StronglyConnected(string v, string w, int depth, int maxDepth){
 	bool stronglyConnected = false;
 	list<string> listOpen;
 	list<string> listClosed;
+	vector<string> vstrCycle;
 
 	listOpen.push_back(w);
 
@@ -487,17 +510,24 @@ list<string> StronglyConnected(string v, string w, int maxDepth){
 				if(std::find(listClosed.begin(), listClosed.end(), vstrCreditors.at(i)) == listClosed.end()){
 					listOpen.push_back(vstrCreditors.at(i));
 				}
-
 			}
 		}
 		else{
 			stronglyConnected = true;
 			list<string>::const_iterator listIt;
 
-			/*for (listIt = listClosed.begin();  listIt != listClosed.end();  listIt++)
+			cout << "cycle: " ;
+			for (listIt = listClosed.end();  listIt != listClosed.begin();  listIt--)
 			{
-				cout << *listIt << ", " ;
-				string nextInList;
+				//cout << *listIt << ", " ;
+		//		vstrCycle.push_back(*listIt);
+			}
+
+			for(unsigned int i = 0; i < vstrCycle.size(); i++){
+				it = mapAccounts.find(vstrCycle.at(i));
+				vector<string> vstrDebtors = it->second.debtors();
+			}
+			/*	string nextInList;
 				nextInList = *++listIt;
 				cout << nextInList << endl;
 				listIt--;
@@ -509,15 +539,11 @@ list<string> StronglyConnected(string v, string w, int maxDepth){
 					//cout << "found " << *(listIt+1) << " among creditors of " << *listIt << endl;
 				//}
 
+			*/
 
 
-			}*/
 			cout << endl;
-
-
 		}
-
-
 	}
 
 	if(!stronglyConnected){
