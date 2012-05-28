@@ -22,6 +22,10 @@ using namespace std;
 
 string strHost = string("192.168.1.100");
 
+struct cycle{
+	vector<string> vstrCycle;
+	float fLCD; 	//lowest common denominator
+};
 
 
 void addNode(string ID, string label, float size );
@@ -31,7 +35,8 @@ void changeEdge(string ID, string source, string target, float weight );
 void deleteNode(string ID);
 void deleteEdge(string ID);
 void StringExplode(std::string str, std::string separator, std::vector<std::string>* results);
-vector<string> StronglyConnected(string v, string w, int depth, int maxDepth);
+cycle StronglyConnected(string v, string w, float amount);
+void cancelOutCycle(cycle cycle);
 
 float ranf();
 float box_muller(float m, float s);
@@ -187,14 +192,68 @@ public:
 
 		changeNode(m_ID, label(), m_fBalance);
 
-		cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 0, 5).size() << endl;
+		cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
+		while(sCycle.vstrCycle.size() != 0){
+			cout << "cycle cancelled out: " << sCycle.fLCD << endl;
+			sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
+			cancelOutCycle(sCycle);
+		}
+		//cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 0, 5).size() << endl;
 
 	}
 
-	void deleteIOU(IOU iou){
-		m_fBalance -= iou.getAmount();
-		m_setIOUsDebet.erase(iou);
+	IOU deleteIOU(IOU iou){
+			m_fBalance -= iou.getAmount();
+			m_setIOUsDebet.erase(iou);
+			return iou;
 	}
+
+	void cancelOut(string debtor, string creditor, float amount){
+		cout << m_ID << " is now cancelling " << amount << " from " << debtor << " and " << creditor << endl;
+		multiset<IOU>::iterator it;
+		float remainingAmount = amount;
+		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
+		{
+			cout << "original iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
+
+			if(it->m_strTargetID == debtor){
+        		if(it->m_fAmount >= remainingAmount){
+        			IOU iou = deleteIOU(*it);
+        			iou.m_fAmount -= remainingAmount;
+        			m_setIOUsDebet.insert(iou);
+        		}
+        		else if(it->m_fAmount < remainingAmount){
+        			deleteIOU(*it);
+        			remainingAmount -= it->m_fAmount;
+        		}
+
+        	}
+
+		}
+
+		remainingAmount = amount;
+		for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
+		{
+			cout << "original iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
+			if(it->m_strSourceID == creditor){
+        		if(it->m_fAmount >= remainingAmount){
+        			IOU iou = deleteIOU(*it);
+        			iou.m_fAmount -= remainingAmount;
+        			m_setIOUsCredit.insert(iou);
+        		}
+        		else if(it->m_fAmount < remainingAmount){
+        			deleteIOU(*it);
+        			remainingAmount -= it->m_fAmount;
+        		}
+        	}
+
+		}
+
+
+
+	}
+
+
 
 	string label(){
 		stringstream ss;
@@ -289,13 +348,16 @@ int main() {
 			}
 		}
 		else if(vstrData.at(0) == string("default")){
+			/*
 			vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
 			vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
 			vIOUdefault.push_back(IOU(string("C"), string("A"), 1));
-			vIOUdefault.push_back(IOU(string("A"), string("D"), 1));
-			vIOUdefault.push_back(IOU(string("D"), string("E"), 1));
-			vIOUdefault.push_back(IOU(string("E"), string("F"), 1));
-			vIOUdefault.push_back(IOU(string("F"), string("A"), 1));
+			*/
+
+			vIOUdefault.push_back(IOU(string("A"), string("D"), 6));
+			vIOUdefault.push_back(IOU(string("D"), string("E"), 4));
+			vIOUdefault.push_back(IOU(string("E"), string("F"), 7));
+			vIOUdefault.push_back(IOU(string("F"), string("A"), 5));
 
 			nIOU = vIOUdefault.size();
 		}
@@ -472,7 +534,10 @@ void deleteEdge(string ID){
 	system(ss.str().c_str());
 }
 
-vector<string> StronglyConnected(string v, string w, int depth, int maxDepth){
+cycle StronglyConnected(string v, string w, float amount){
+	cycle sCycle;
+	sCycle.fLCD = amount;
+
 	bool stronglyConnected = false;
 	list<string> listOpen;
 	list<string> listClosed;
@@ -533,6 +598,12 @@ vector<string> StronglyConnected(string v, string w, int depth, int maxDepth){
 					//cout << "found " << *listIt << " among debtors of " << strNode << endl;
 					vstrCycle.push_back(*listIt);
 					strNode = *listIt;
+
+					float fOwedFrom = it->second.owedFrom(*listIt);
+					if(fOwedFrom < sCycle.fLCD){
+						sCycle.fLCD = fOwedFrom;
+					}
+
 				}
 			}
 
@@ -548,10 +619,26 @@ vector<string> StronglyConnected(string v, string w, int depth, int maxDepth){
 		vstrCycle.clear();
 	}
 
-	return vstrCycle;
+	sCycle.vstrCycle = vstrCycle;
+	return sCycle;
 }
 
+void cancelOutCycle(cycle cycle){
+	for(unsigned int i = 0; i < cycle.vstrCycle.size(); i++){
+		map<string, Account>::iterator it;
+		it = mapAccounts.find(cycle.vstrCycle.at(i));
 
+		if(i == 0){
+			it->second.cancelOut(cycle.vstrCycle.at(cycle.vstrCycle.size()-1), cycle.vstrCycle.at(1), cycle.fLCD);
+		}
+		else if(i == (cycle.vstrCycle.size()-1)){
+			it->second.cancelOut(cycle.vstrCycle.at(i-1), cycle.vstrCycle.at(0), cycle.fLCD);
+		}
+		else{
+			it->second.cancelOut(cycle.vstrCycle.at(i-1), cycle.vstrCycle.at(i+1), cycle.fLCD);
+		}
+	}
+}
 void StringExplode(std::string str, std::string separator, std::vector<std::string>* results){
     std::size_t found;
     found = str.find_first_of(separator);
