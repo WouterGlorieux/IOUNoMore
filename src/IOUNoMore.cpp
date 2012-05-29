@@ -104,6 +104,25 @@ public:
 	}
 	~Account(){}
 
+	float balance(){
+		float fBalance=0;
+		float fDebet=0;
+		float fCredit=0;
+
+		multiset<IOU>::iterator it;
+		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
+		{
+			fDebet += it->m_fAmount;
+		}
+		for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
+		{
+			fCredit += it->m_fAmount;
+		}
+		fBalance = fDebet - fCredit;
+		m_fBalance = fBalance;
+		return fBalance;
+	}
+
 	vector<string> creditors(){
 		vector<string> vstrCreditors;
 		multiset<IOU>::iterator it;
@@ -164,7 +183,7 @@ public:
 	}
 	void giveIOU(IOU iou){
 		m_setIOUsDebet.insert(iou);
-		m_fBalance -= iou.getAmount();
+		//m_fBalance -= iou.getAmount();
 
 		map<string, Account>::iterator it;
 		it = mapAccounts.find(iou.m_strTargetID);
@@ -194,17 +213,20 @@ public:
 
 		cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
 		while(sCycle.vstrCycle.size() != 0){
+			cancelOutCycle(sCycle);
 			cout << "cycle cancelled out: " << sCycle.fLCD << endl;
 			sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
-			cancelOutCycle(sCycle);
+
 		}
 		//cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 0, 5).size() << endl;
 
+		balance();
 	}
 
 	IOU deleteIOU(IOU iou){
-			m_fBalance -= iou.getAmount();
+			//m_fBalance -= iou.getAmount();
 			m_setIOUsDebet.erase(iou);
+			balance();
 			return iou;
 	}
 
@@ -214,41 +236,55 @@ public:
 		float remainingAmount = amount;
 		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
 		{
-			cout << "original iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
+			cout << "original debet iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
 
-			if(it->m_strTargetID == debtor){
+			if(it->m_strTargetID == debtor && remainingAmount > 0){
+				cout << "debtor = target" << endl;
         		if(it->m_fAmount >= remainingAmount){
-        			IOU iou = deleteIOU(*it);
+        			IOU iou = *it;
         			iou.m_fAmount -= remainingAmount;
-        			m_setIOUsDebet.insert(iou);
+        			//deleteEdge(iou.m_strSourceID + "-" + iou.m_strTargetID);
+        			m_setIOUsDebet.erase(*it);
+        			if(iou.m_fAmount > 0){
+        				m_setIOUsDebet.insert(iou);
+        				//addEdge(iou.m_strSourceID + "-" + iou.m_strTargetID, iou.m_strSourceID, iou.m_strTargetID, owedTo(iou.m_strTargetID));
+        			}
+
         		}
         		else if(it->m_fAmount < remainingAmount){
-        			deleteIOU(*it);
         			remainingAmount -= it->m_fAmount;
+        			string strEdge = it->m_strSourceID + "-" + it->m_strTargetID;
+        			//deleteEdge(strEdge);
+        			m_setIOUsDebet.erase(*it);
         		}
-
         	}
-
 		}
 
 		remainingAmount = amount;
 		for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
 		{
-			cout << "original iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
-			if(it->m_strSourceID == creditor){
+			cout << "original credit iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
+			if(it->m_strSourceID == creditor && remainingAmount > 0){
         		if(it->m_fAmount >= remainingAmount){
-        			IOU iou = deleteIOU(*it);
+        			IOU iou = *it;
         			iou.m_fAmount -= remainingAmount;
-        			m_setIOUsCredit.insert(iou);
+        			deleteEdge(iou.m_strSourceID + "-" + iou.m_strTargetID);
+        			m_setIOUsCredit.erase(*it);
+        			if(iou.m_fAmount > 0){
+        				m_setIOUsCredit.insert(iou);
+        				addEdge(iou.m_strSourceID + "-" + iou.m_strTargetID, iou.m_strSourceID, iou.m_strTargetID, owedFrom(iou.m_strSourceID));
+        			}
         		}
         		else if(it->m_fAmount < remainingAmount){
-        			deleteIOU(*it);
         			remainingAmount -= it->m_fAmount;
+        			string strEdge = it->m_strSourceID + "-" + it->m_strTargetID;
+        			deleteEdge(strEdge);
+        			m_setIOUsCredit.erase(*it);
         		}
         	}
 
 		}
-
+		balance();
 
 
 	}
@@ -348,16 +384,23 @@ int main() {
 			}
 		}
 		else if(vstrData.at(0) == string("default")){
-			/*
+
 			vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
 			vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
 			vIOUdefault.push_back(IOU(string("C"), string("A"), 1));
-			*/
 
-			vIOUdefault.push_back(IOU(string("A"), string("D"), 6));
-			vIOUdefault.push_back(IOU(string("D"), string("E"), 4));
-			vIOUdefault.push_back(IOU(string("E"), string("F"), 7));
-			vIOUdefault.push_back(IOU(string("F"), string("A"), 5));
+			vIOUdefault.push_back(IOU(string("D"), string("E"), 1));
+			vIOUdefault.push_back(IOU(string("E"), string("F"), 1));
+			vIOUdefault.push_back(IOU(string("F"), string("G"), 1));
+			vIOUdefault.push_back(IOU(string("G"), string("D"), 1));
+
+			vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
+			vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
+			vIOUdefault.push_back(IOU(string("A"), string("D"), 1));
+			vIOUdefault.push_back(IOU(string("D"), string("C"), 1));
+			vIOUdefault.push_back(IOU(string("C"), string("A"), 2));
+
+
 
 			nIOU = vIOUdefault.size();
 		}
@@ -429,7 +472,7 @@ IOU randomIOU(){
 
 	dRandom1 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability1 ;
 	for(unsigned int i = 0; i < vdProbabilitiesCumulative1.size()-1; i++){
-		if(vdProbabilitiesCumulative1.at(i) <= dRandom1 && vdProbabilitiesCumulative1.at(i+1) >= dRandom1 ){
+		if(vdProbabilitiesCumulative1.at(i) <= dRandom1 && vdProbabilitiesCumulative1.at(i+1) >+ dRandom1 ){
 			ss << i+1 << "_" ;
 			ssSource << i+1 << "_" ;
 			break;
@@ -438,7 +481,7 @@ IOU randomIOU(){
 
 	dRandom2 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability2 ;
 	for(unsigned int i = 0; i < vdProbabilitiesCumulative2.size()-1; i++){
-		if(vdProbabilitiesCumulative2.at(i) <= dRandom2 && vdProbabilitiesCumulative2.at(i+1) >= dRandom2 ){
+		if(vdProbabilitiesCumulative2.at(i) <= dRandom2 && vdProbabilitiesCumulative2.at(i+1) >+ dRandom2 ){
 			ss << i+1 << ";";
 			ssSource << i+1;
 			float fMedian = i+1;
@@ -462,6 +505,7 @@ IOU randomIOU(){
 			ssTarget << i+1 << "_" ;
 			break;
 		}
+
 	}
 
 	dRandom4 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability4 ;
@@ -549,8 +593,16 @@ cycle StronglyConnected(string v, string w, float amount){
 
 	map<string, Account>::iterator it;
 	while(listOpen.size()>0 && !stronglyConnected){
+
+
+		strNode = listOpen.front();
+		listOpen.pop_front();
+		//cout << v << " open node: " << strNode << endl;
+		listClosed.push_back(strNode);
+
+		//display open and closed list
 		list<string>::const_iterator listIt;
-		/*cout << v << "->" << w << endl;
+		cout << v << "->" << w << endl;
 		cout << "list open: " ;
 		for (listIt = listOpen.begin();  listIt != listOpen.end();  listIt++)
 		{
@@ -562,12 +614,8 @@ cycle StronglyConnected(string v, string w, float amount){
 			cout << *listIt << ", ";
 		}
 		cout << endl;
-		 */
 
-		strNode = listOpen.front();
-		listOpen.pop_front();
-		//cout << v << " open node: " << strNode << endl;
-		listClosed.push_back(strNode);
+
 
 		if(v != strNode){
 			//cout << v << " not equal to " << strNode << endl;
@@ -595,7 +643,7 @@ cycle StronglyConnected(string v, string w, float amount){
 				vstrDebtors = it->second.debtors();
 
 				if(std::find(vstrDebtors.begin(), vstrDebtors.end(), *listIt)!=vstrDebtors.end()){
-					//cout << "found " << *listIt << " among debtors of " << strNode << endl;
+					cout << "found " << *listIt << " among debtors of " << strNode << endl;
 					vstrCycle.push_back(*listIt);
 					strNode = *listIt;
 
@@ -611,7 +659,7 @@ cycle StronglyConnected(string v, string w, float amount){
 			for(unsigned int i = 0; i < vstrCycle.size(); i++){
 				cout << vstrCycle.at(i) << ", " ;
 			}
-			cout << endl;
+			cout << "." << endl;
 		}
 	}
 
