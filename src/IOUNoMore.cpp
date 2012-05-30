@@ -62,6 +62,9 @@ public:
 	}
 	~IOU(){}
 
+	void display(){
+		cout << m_strSourceID << " owes " << m_fAmount << " to " << m_strTargetID << endl;
+	}
 	bool operator < (const IOU& refParam) const
 	{
 		if(this->m_strTargetID != refParam.m_strTargetID){
@@ -89,7 +92,7 @@ public:
 	float m_fBalance;
 
 	Account(string ID){
-		cout << "init called for " << ID << endl;
+		//cout << "init called for " << ID << endl;
 		m_ID = ID;
 		m_fBalance = 0.0;
 
@@ -146,7 +149,8 @@ public:
 
 		for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
 		{
-        	if(it->m_strSourceID != strTmpSource){
+
+			if(it->m_strSourceID != strTmpSource){
         		//cout << "adding " << it->m_strSourceID << " to debtors" << endl;
         		vstrDebtors.push_back(it->m_strSourceID);
         		strTmpSource = it->m_strSourceID;
@@ -194,7 +198,7 @@ public:
 
 		it = mapAccounts.find(iou.m_strTargetID);
 
-		cout << "account from map: " << it->second.m_ID << " " << it->second.m_fBalance << endl;
+		//cout << "account from map: " << it->second.m_ID << " " << it->second.m_fBalance << endl;
 		it->second.m_setIOUsCredit.insert(iou);
 		it->second.m_fBalance += iou.getAmount();
 
@@ -212,9 +216,10 @@ public:
 		changeNode(m_ID, label(), m_fBalance);
 
 		cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
-		while(sCycle.vstrCycle.size() != 0){
+		while(sCycle.vstrCycle.size() >= 3){
 			cancelOutCycle(sCycle);
 			cout << "cycle cancelled out: " << sCycle.fLCD << endl;
+			cout << "--------------------------------------------" << endl;
 			sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
 
 		}
@@ -236,15 +241,16 @@ public:
 		float remainingAmount = amount;
 		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
 		{
-			cout << "original debet iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
 
 			if(it->m_strTargetID == debtor && remainingAmount > 0){
-				cout << "debtor = target" << endl;
-        		if(it->m_fAmount >= remainingAmount){
+				//cout << "original debet iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
+				//cout << "remaining amount debet:" << remainingAmount << endl;
+
+				if(it->m_fAmount >= remainingAmount){
         			IOU iou = *it;
         			iou.m_fAmount -= remainingAmount;
         			//deleteEdge(iou.m_strSourceID + "-" + iou.m_strTargetID);
-        			m_setIOUsDebet.erase(*it);
+        			m_setIOUsDebet.erase(it);
         			if(iou.m_fAmount > 0){
         				m_setIOUsDebet.insert(iou);
         				//addEdge(iou.m_strSourceID + "-" + iou.m_strTargetID, iou.m_strSourceID, iou.m_strTargetID, owedTo(iou.m_strTargetID));
@@ -263,13 +269,15 @@ public:
 		remainingAmount = amount;
 		for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
 		{
-			cout << "original credit iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
 			if(it->m_strSourceID == creditor && remainingAmount > 0){
-        		if(it->m_fAmount >= remainingAmount){
+				//cout << "original credit iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
+				//cout << "remaining amount credit:" << remainingAmount << endl;
+
+				if(it->m_fAmount >= remainingAmount){
         			IOU iou = *it;
         			iou.m_fAmount -= remainingAmount;
         			deleteEdge(iou.m_strSourceID + "-" + iou.m_strTargetID);
-        			m_setIOUsCredit.erase(*it);
+        			m_setIOUsCredit.erase(it);
         			if(iou.m_fAmount > 0){
         				m_setIOUsCredit.insert(iou);
         				addEdge(iou.m_strSourceID + "-" + iou.m_strTargetID, iou.m_strSourceID, iou.m_strTargetID, owedFrom(iou.m_strSourceID));
@@ -428,6 +436,9 @@ int main() {
 				iou = IOU(vstrData.at(0), vstrData.at(2), atof(vstrData.at(1).c_str()));
 			}
 
+			cout << "New transaction: " ;
+			iou.display();
+			cout << endl;
 			map<string, Account>::iterator it;
 			it = mapAccounts.find(iou.m_strSourceID);
 
@@ -599,7 +610,7 @@ cycle StronglyConnected(string v, string w, float amount){
 		listOpen.pop_front();
 		//cout << v << " open node: " << strNode << endl;
 		listClosed.push_back(strNode);
-
+/*
 		//display open and closed list
 		list<string>::const_iterator listIt;
 		cout << v << "->" << w << endl;
@@ -614,7 +625,7 @@ cycle StronglyConnected(string v, string w, float amount){
 			cout << *listIt << ", ";
 		}
 		cout << endl;
-
+*/
 
 
 		if(v != strNode){
@@ -643,7 +654,7 @@ cycle StronglyConnected(string v, string w, float amount){
 				vstrDebtors = it->second.debtors();
 
 				if(std::find(vstrDebtors.begin(), vstrDebtors.end(), *listIt)!=vstrDebtors.end()){
-					cout << "found " << *listIt << " among debtors of " << strNode << endl;
+					//cout << "found " << *listIt << " among debtors of " << strNode << endl;
 					vstrCycle.push_back(*listIt);
 					strNode = *listIt;
 
@@ -654,12 +665,12 @@ cycle StronglyConnected(string v, string w, float amount){
 
 				}
 			}
-
-			cout << "found cycle: " ;
+			cout << "------------------------------------------" << endl;
+			cout << "detected cycle: " ;
 			for(unsigned int i = 0; i < vstrCycle.size(); i++){
 				cout << vstrCycle.at(i) << ", " ;
 			}
-			cout << "." << endl;
+			cout << endl;
 		}
 	}
 
