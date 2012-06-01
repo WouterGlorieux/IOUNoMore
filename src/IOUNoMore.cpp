@@ -217,6 +217,7 @@ public:
 
 		cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
 		while(sCycle.vstrCycle.size() >= 3){
+
 			cancelOutCycle(sCycle);
 			cout << "cycle cancelled out: " << sCycle.fLCD << endl;
 			cout << "--------------------------------------------" << endl;
@@ -241,27 +242,21 @@ public:
 		float remainingAmount = amount;
 		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
 		{
-
 			if(it->m_strTargetID == debtor && remainingAmount > 0){
-				//cout << "original debet iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
-				//cout << "remaining amount debet:" << remainingAmount << endl;
-
 				if(it->m_fAmount >= remainingAmount){
         			IOU iou = *it;
         			iou.m_fAmount -= remainingAmount;
-        			//deleteEdge(iou.m_strSourceID + "-" + iou.m_strTargetID);
+        			remainingAmount = 0;
         			m_setIOUsDebet.erase(it);
         			if(iou.m_fAmount > 0){
         				m_setIOUsDebet.insert(iou);
-        				//addEdge(iou.m_strSourceID + "-" + iou.m_strTargetID, iou.m_strSourceID, iou.m_strTargetID, owedTo(iou.m_strTargetID));
+        				it = m_setIOUsDebet.begin();
         			}
-
         		}
         		else if(it->m_fAmount < remainingAmount){
         			remainingAmount -= it->m_fAmount;
         			string strEdge = it->m_strSourceID + "-" + it->m_strTargetID;
-        			//deleteEdge(strEdge);
-        			m_setIOUsDebet.erase(*it);
+        			m_setIOUsDebet.erase(it);
         		}
         	}
 		}
@@ -270,31 +265,27 @@ public:
 		for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
 		{
 			if(it->m_strSourceID == creditor && remainingAmount > 0){
-				//cout << "original credit iou: " << it->m_strSourceID << "->" << it->m_strTargetID << ": " << it->m_fAmount << endl;
-				//cout << "remaining amount credit:" << remainingAmount << endl;
-
 				if(it->m_fAmount >= remainingAmount){
-        			IOU iou = *it;
+					IOU iou = *it;
         			iou.m_fAmount -= remainingAmount;
+        			remainingAmount = 0;
         			deleteEdge(iou.m_strSourceID + "-" + iou.m_strTargetID);
         			m_setIOUsCredit.erase(it);
         			if(iou.m_fAmount > 0){
         				m_setIOUsCredit.insert(iou);
         				addEdge(iou.m_strSourceID + "-" + iou.m_strTargetID, iou.m_strSourceID, iou.m_strTargetID, owedFrom(iou.m_strSourceID));
+        				it = m_setIOUsCredit.begin();
         			}
         		}
         		else if(it->m_fAmount < remainingAmount){
         			remainingAmount -= it->m_fAmount;
         			string strEdge = it->m_strSourceID + "-" + it->m_strTargetID;
         			deleteEdge(strEdge);
-        			m_setIOUsCredit.erase(*it);
+        			m_setIOUsCredit.erase(it);
         		}
         	}
-
 		}
 		balance();
-
-
 	}
 
 
@@ -684,6 +675,7 @@ cycle StronglyConnected(string v, string w, float amount){
 
 void cancelOutCycle(cycle cycle){
 	for(unsigned int i = 0; i < cycle.vstrCycle.size(); i++){
+
 		map<string, Account>::iterator it;
 		it = mapAccounts.find(cycle.vstrCycle.at(i));
 
