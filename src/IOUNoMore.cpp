@@ -78,6 +78,8 @@ public:
 
 	float getAmount(){ return m_fAmount;}
 };
+
+void newTransaction(IOU iou);
 IOU randomIOU();
 
 class Account;
@@ -121,7 +123,7 @@ public:
 		{
 			fCredit += it->m_fAmount;
 		}
-		fBalance = fDebet - fCredit;
+		fBalance = fCredit -fDebet;
 		m_fBalance = fBalance;
 		return fBalance;
 	}
@@ -213,7 +215,6 @@ public:
 			changeEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, owedTo(iou.m_strTargetID)-owedFrom(iou.m_strTargetID));
 		}
 
-		changeNode(m_ID, label(), m_fBalance);
 
 		cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
 		while(sCycle.vstrCycle.size() >= 3){
@@ -227,6 +228,8 @@ public:
 		//cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 0, 5).size() << endl;
 
 		balance();
+		changeNode(m_ID, label(), m_fBalance);
+
 	}
 
 	IOU deleteIOU(IOU iou){
@@ -427,19 +430,12 @@ int main() {
 				iou = IOU(vstrData.at(0), vstrData.at(2), atof(vstrData.at(1).c_str()));
 			}
 
-			cout << "New transaction: " ;
-			iou.display();
-			cout << endl;
-			map<string, Account>::iterator it;
-			it = mapAccounts.find(iou.m_strSourceID);
-
-			if(it == mapAccounts.end()){
-				Account cAccount = Account(iou.m_strSourceID);
+			if(iou.m_strSourceID == iou.m_strTargetID){
+				i--;
+				continue;
 			}
 
-			it = mapAccounts.find(iou.m_strSourceID);
-			it->second.giveIOU(iou);
-
+			newTransaction(iou);
 			output << iou.m_strSourceID << ";" << iou.m_fAmount << ";" << iou.m_strTargetID << endl;
 		}
 	}
@@ -462,6 +458,31 @@ int main() {
 	}
 
 	return 0;
+}
+
+void newTransaction(IOU iou){
+	cout << "New transaction: " ;
+	iou.display();
+	cout << endl;
+	map<string, Account>::iterator it;
+	it = mapAccounts.find(iou.m_strSourceID);
+
+	if(it == mapAccounts.end()){
+		Account cAccount = Account(iou.m_strSourceID);
+	}
+
+	it = mapAccounts.find(iou.m_strSourceID);
+	cout << "balance of " << it->second.m_ID << " is " << it->second.balance() << endl;
+
+	if(it->second.balance() < iou.m_fAmount && iou.m_strSourceID != string("IOU")){
+
+		cout << it->second.balance() << " " << iou.m_strSourceID << " " << iou.m_fAmount << endl;
+		newTransaction(IOU(string("IOU"), iou.m_strSourceID, iou.m_fAmount-it->second.m_fBalance));
+	}
+
+	cout << "give iou" << endl;
+	it->second.giveIOU(iou);
+	cout << "iou given" << endl;
 }
 
 IOU randomIOU(){
@@ -519,10 +540,6 @@ IOU randomIOU(){
 		}
 	}
 
-	if(ssSource.str()==ssTarget.str()){
-		ssTarget.str(string("bad target"));
-	}
-
 	IOU iou = IOU(ssSource.str(), ssTarget.str(), fAmount);
 
 	return iou;
@@ -531,8 +548,12 @@ IOU randomIOU(){
 void addNode(string ID, string label, float size = 1 ){
 	stringstream ss;
 
+	if(ID == string("IOU")){
+			size = 100;
+	}
+
 	ss << "curl 'http://" << strHost <<":8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"an\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}'";
+	ss << "'{\"an\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}' -s -o 'curlOutput.txt'";
 	system(ss.str().c_str());
 
 }
@@ -541,7 +562,7 @@ void addEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
 	ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}'";
+	ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}' -s -o 'curlOutput.txt'";
 	system(ss.str().c_str());
 
 }
@@ -549,8 +570,12 @@ void addEdge(string ID, string source, string target, float weight = 1 ){
 void changeNode(string ID, string label, float size = 1 ){
 	stringstream ss;
 
+	if(ID == string("IOU")){
+		size = 100;
+	}
+
 	ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"cn\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}'";
+	ss << "'{\"cn\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}' -s -o 'curlOutput.txt'";
 	system(ss.str().c_str());
 
 }
@@ -559,7 +584,7 @@ void changeEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
 	ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"ce\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}'";
+	ss << "'{\"ce\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}' -s -o 'curlOutput.txt'";
 	system(ss.str().c_str());
 
 }
@@ -569,14 +594,14 @@ void deleteNode(string ID){
 	stringstream ss;
 
 	ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"dn\":{\"" << ID << "\":{}}}'";
+	ss << "'{\"dn\":{\"" << ID << "\":{}}}' -s -o 'curlOutput.txt'";
 	system(ss.str().c_str());
 }
 void deleteEdge(string ID){
 	stringstream ss;
 
 	ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"de\":{\"" << ID << "\":{}}}'";
+	ss << "'{\"de\":{\"" << ID << "\":{}}}' -s -o 'curlOutput.txt'";
 	system(ss.str().c_str());
 }
 
