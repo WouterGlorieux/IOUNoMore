@@ -218,12 +218,8 @@ public:
 
 		cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
 		while(sCycle.vstrCycle.size() >= 3){
-
 			cancelOutCycle(sCycle);
-			cout << "cycle cancelled out: " << sCycle.fLCD << endl;
-			cout << "--------------------------------------------" << endl;
 			sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
-
 		}
 		//cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 0, 5).size() << endl;
 
@@ -240,7 +236,7 @@ public:
 	}
 
 	void cancelOut(string debtor, string creditor, float amount){
-		cout << m_ID << " is now cancelling " << amount << " from " << debtor << " and " << creditor << endl;
+		//cout << m_ID << " is now cancelling " << amount << " from " << debtor << " and " << creditor << endl;
 		multiset<IOU>::iterator it;
 		float remainingAmount = amount;
 		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
@@ -418,10 +414,6 @@ int main() {
 			IOU iou = IOU(string(""), string(""), 0);
 			if(vstrData.at(0) == string("random")){
 				iou = randomIOU();
-				if(iou.m_strSourceID == iou.m_strTargetID){
-					cout << "source and target are the same.";
-					//exit(1);
-				}
 			}
 			else if(vstrData.at(0) == string("default")){
 				iou = vIOUdefault.at(i);
@@ -435,12 +427,14 @@ int main() {
 				continue;
 			}
 
+			cout << i+1 << ": ";
 			newTransaction(iou);
 			output << iou.m_strSourceID << ";" << iou.m_fAmount << ";" << iou.m_strTargetID << endl;
 		}
 	}
 
 	//list all accounts with their balance
+	float totalBalance = 0;
 	for( map<string,Account>::iterator it=mapAccounts.begin(); it!=mapAccounts.end(); ++it)
 	{
 		Account cAccount = (*it).second;
@@ -455,34 +449,36 @@ int main() {
 			IOU cIOU = *it2;
 			cout << "\treceived from " << cIOU.m_strSourceID << ": " << cIOU.m_fAmount << endl;
 		}
+
+		if(cAccount.m_ID != string("IOU")){
+			totalBalance += cAccount.m_fBalance;
+		}
 	}
 
+
+	cout << endl << "Total of all balances: " << totalBalance << endl;
+	map<string,Account>::iterator it=mapAccounts.find(string("IOU"));
+	cout << "Balance of IOU: " << it->second.m_fBalance << endl;
 	return 0;
 }
 
 void newTransaction(IOU iou){
 	cout << "New transaction: " ;
 	iou.display();
-	cout << endl;
+
 	map<string, Account>::iterator it;
 	it = mapAccounts.find(iou.m_strSourceID);
 
 	if(it == mapAccounts.end()){
 		Account cAccount = Account(iou.m_strSourceID);
 	}
-
 	it = mapAccounts.find(iou.m_strSourceID);
-	cout << "balance of " << it->second.m_ID << " is " << it->second.balance() << endl;
 
 	if(it->second.balance() < iou.m_fAmount && iou.m_strSourceID != string("IOU")){
-
-		cout << it->second.balance() << " " << iou.m_strSourceID << " " << iou.m_fAmount << endl;
 		newTransaction(IOU(string("IOU"), iou.m_strSourceID, iou.m_fAmount-it->second.m_fBalance));
 	}
 
-	cout << "give iou" << endl;
 	it->second.giveIOU(iou);
-	cout << "iou given" << endl;
 }
 
 IOU randomIOU(){
@@ -681,12 +677,11 @@ cycle StronglyConnected(string v, string w, float amount){
 
 				}
 			}
-			cout << "------------------------------------------" << endl;
-			cout << "detected cycle: " ;
+			cout << "\tdetected cycle: " ;
 			for(unsigned int i = 0; i < vstrCycle.size(); i++){
 				cout << vstrCycle.at(i) << ", " ;
 			}
-			cout << endl;
+			cout << "Value: " << sCycle.fLCD << endl;
 		}
 	}
 
