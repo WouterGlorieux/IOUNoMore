@@ -37,6 +37,7 @@ void deleteEdge(string ID);
 void StringExplode(std::string str, std::string separator, std::vector<std::string>* results);
 cycle StronglyConnected(string v, string w, float amount);
 void cancelOutCycle(cycle cycle);
+bool validateNetwork();
 
 float ranf();
 float box_muller(float m, float s);
@@ -216,10 +217,21 @@ public:
 		}
 
 
+		float fCanceledOut = 0.0;
 		cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
-		while(sCycle.vstrCycle.size() >= 3){
+		while(sCycle.vstrCycle.size() >= 3 && fCanceledOut < iou.m_fAmount){
+			cout << "\tdetected cycle: " ;
+			for(unsigned int i = 0; i < sCycle.vstrCycle.size(); i++){
+				cout << sCycle.vstrCycle.at(i) << ", " ;
+			}
+			cout << "Value: " << sCycle.fLCD << endl;
+
+			fCanceledOut += sCycle.fLCD;
+			cout << "\t\t" << fCanceledOut << " of " << iou.m_fAmount << " has been cancelled out." << endl;
+
 			cancelOutCycle(sCycle);
-			sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount);
+
+			sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.m_fAmount-fCanceledOut);
 		}
 		//cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 0, 5).size() << endl;
 
@@ -236,12 +248,13 @@ public:
 	}
 
 	void cancelOut(string debtor, string creditor, float amount){
-		//cout << m_ID << " is now cancelling " << amount << " from " << debtor << " and " << creditor << endl;
+		//cout << "\t\t" << m_ID << " is now cancelling " << amount << " from " << debtor << " and " << creditor << endl;
 		multiset<IOU>::iterator it;
 		float remainingAmount = amount;
 		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
 		{
 			if(it->m_strTargetID == debtor && remainingAmount > 0){
+				cout << "debet remaining amount " << remainingAmount << endl;
 				if(it->m_fAmount >= remainingAmount){
         			IOU iou = *it;
         			iou.m_fAmount -= remainingAmount;
@@ -264,6 +277,7 @@ public:
 		for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
 		{
 			if(it->m_strSourceID == creditor && remainingAmount > 0){
+				cout << "credit remaining amount " << remainingAmount << endl;
 				if(it->m_fAmount >= remainingAmount){
 					IOU iou = *it;
         			iou.m_fAmount -= remainingAmount;
@@ -285,6 +299,7 @@ public:
         	}
 		}
 		balance();
+		validateNetwork();
 	}
 
 
@@ -383,6 +398,17 @@ int main() {
 		}
 		else if(vstrData.at(0) == string("default")){
 
+		vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
+		vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
+		//vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
+		//vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
+		vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
+		vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
+		//vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
+		//vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
+		vIOUdefault.push_back(IOU(string("C"), string("A"), 1));
+
+			/*
 			vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
 			vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
 			vIOUdefault.push_back(IOU(string("C"), string("A"), 1));
@@ -398,6 +424,43 @@ int main() {
 			vIOUdefault.push_back(IOU(string("D"), string("C"), 1));
 			vIOUdefault.push_back(IOU(string("C"), string("A"), 2));
 
+			vIOUdefault.push_back(IOU(string("A"), string("B"), 2.81853));
+			vIOUdefault.push_back(IOU(string("C"), string("D"), 6.10824));
+			vIOUdefault.push_back(IOU(string("E"), string("F"), 8.73577));
+			vIOUdefault.push_back(IOU(string("F"), string("G"), 5.57332));
+
+			vIOUdefault.push_back(IOU(string("2_6"), string("5_7"), 2.924));
+			vIOUdefault.push_back(IOU(string("5_7"), string("3_7"), 2.954));
+			vIOUdefault.push_back(IOU(string("2_6"), string("5_6"), 2.404));
+			vIOUdefault.push_back(IOU(string("5_6"), string("3_7"), 5.904));
+			vIOUdefault.push_back(IOU(string("2_6"), string("4_5"), 1.94));
+			vIOUdefault.push_back(IOU(string("4_5"), string("3_7"), 2.804));
+			vIOUdefault.push_back(IOU(string("2_6"), string("3_5"), 8.904));
+			vIOUdefault.push_back(IOU(string("3_5"), string("3_7"), 1.904));
+			vIOUdefault.push_back(IOU(string("2_6"), string("7_7"), 2.934));
+			vIOUdefault.push_back(IOU(string("7_7"), string("5_7"), 4.904));
+			vIOUdefault.push_back(IOU(string("5_7"), string("3_7"), 10.904));
+			vIOUdefault.push_back(IOU(string("2_6"), string("4_5"), 2.4));
+			vIOUdefault.push_back(IOU(string("4_5"), string("5_7"), 7.943));
+			vIOUdefault.push_back(IOU(string("5_7"), string("3_7"), 2.604));
+			vIOUdefault.push_back(IOU(string("2_6"), string("2_7"), 2.964));
+			vIOUdefault.push_back(IOU(string("2_7"), string("6_5"), 9.904));
+			vIOUdefault.push_back(IOU(string("6_5"), string("2_7"), 0.904));
+			vIOUdefault.push_back(IOU(string("2_7"), string("5_6"), 2.104));
+			vIOUdefault.push_back(IOU(string("5_6"), string("3_7"), 0.04));
+			vIOUdefault.push_back(IOU(string("2_6"), string("1_6"), 2.903));
+			vIOUdefault.push_back(IOU(string("1_6"), string("4_7"), 2.905));
+			vIOUdefault.push_back(IOU(string("4_7"), string("3_7"), 2.994));
+			vIOUdefault.push_back(IOU(string("2_6"), string("2_7"), 2.924));
+			vIOUdefault.push_back(IOU(string("2_7"), string("3_5"), 6.04));
+			vIOUdefault.push_back(IOU(string("3_5"), string("3_7"), 2.204));
+			vIOUdefault.push_back(IOU(string("2_6"), string("1_6"), 8.903));
+			vIOUdefault.push_back(IOU(string("1_6"), string("4_7"), 3.905));
+			vIOUdefault.push_back(IOU(string("4_7"), string("8_6"), 7.904));
+			vIOUdefault.push_back(IOU(string("8_6"), string("8_7"), 9.904));
+			vIOUdefault.push_back(IOU(string("8_7"), string("3_7"), 10.904));
+			vIOUdefault.push_back(IOU(string("2_6"), string("3_7"), 6.904));
+*/
 
 
 			nIOU = vIOUdefault.size();
@@ -464,6 +527,11 @@ int main() {
 
 void newTransaction(IOU iou){
 	cout << "New transaction: " ;
+
+
+	float fRounded = floor(iou.m_fAmount * 100) / 100;
+	iou.m_fAmount = fRounded;
+
 	iou.display();
 
 	map<string, Account>::iterator it;
@@ -479,6 +547,8 @@ void newTransaction(IOU iou){
 	}
 
 	it->second.giveIOU(iou);
+
+	validateNetwork();
 }
 
 IOU randomIOU(){
@@ -677,11 +747,7 @@ cycle StronglyConnected(string v, string w, float amount){
 
 				}
 			}
-			cout << "\tdetected cycle: " ;
-			for(unsigned int i = 0; i < vstrCycle.size(); i++){
-				cout << vstrCycle.at(i) << ", " ;
-			}
-			cout << "Value: " << sCycle.fLCD << endl;
+
 		}
 	}
 
@@ -709,7 +775,45 @@ void cancelOutCycle(cycle cycle){
 			it->second.cancelOut(cycle.vstrCycle.at(i-1), cycle.vstrCycle.at(i+1), cycle.fLCD);
 		}
 	}
+
+	validateNetwork();
 }
+
+bool isEqual(float a, float b){
+	const float fEpsilon = 0.00001;
+	return fabs(a - b) <= fEpsilon * fabs(a) ;
+}
+
+bool validateNetwork(){
+	bool bOk = false;
+
+	float totalBalance = 0;
+	for( map<string,Account>::iterator it=mapAccounts.begin(); it!=mapAccounts.end(); ++it)
+	{
+		Account cAccount = (*it).second;
+		if(cAccount.m_ID != string("IOU")){
+			totalBalance += cAccount.m_fBalance;
+		}
+	}
+
+	map<string,Account>::iterator it = mapAccounts.find(string("IOU"));
+
+	float fNetworkBalance = it->second.m_fBalance;
+	if(isEqual(fabs(fNetworkBalance), totalBalance) ){
+		bOk = true;
+	}
+	else{
+		cout << "Network balance check failed!" << endl;
+		cout << "Balance IOU: " << fabs(fNetworkBalance) << endl;
+		cout << "Balance net: " << totalBalance << endl;
+		cout << "difference: " << fabs(fNetworkBalance) - totalBalance << endl;
+		char ch;
+		cin >> ch;
+	}
+
+	return bOk;
+}
+
 void StringExplode(std::string str, std::string separator, std::vector<std::string>* results){
     std::size_t found;
     found = str.find_first_of(separator);
