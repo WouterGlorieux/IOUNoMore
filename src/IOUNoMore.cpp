@@ -38,6 +38,7 @@ void StringExplode(std::string str, std::string separator, std::vector<std::stri
 cycle StronglyConnected(string v, string w, float amount);
 void cancelOutCycle(cycle cycle);
 bool validateNetwork();
+bool validateOwedFromTo(string a, string b);
 
 float ranf();
 float box_muller(float m, float s);
@@ -90,8 +91,8 @@ map<string, Account> mapAccounts;
 class Account{
 public:
 	string m_ID;
-	multiset<IOU> m_setIOUsDebet;
-	multiset<IOU> m_setIOUsCredit;
+	multiset<IOU> m_setIOUsGiven;
+	multiset<IOU> m_setIOUsReceived;
 	float m_fBalance;
 
 	Account(string ID){
@@ -116,11 +117,11 @@ public:
 		float fCredit=0;
 
 		multiset<IOU>::iterator it;
-		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
+		for (it = m_setIOUsGiven.begin();  it != m_setIOUsGiven.end();  it++)
 		{
 			fDebet += it->m_fAmount;
 		}
-		for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
+		for (it = m_setIOUsReceived.begin();  it != m_setIOUsReceived.end();  it++)
 		{
 			fCredit += it->m_fAmount;
 		}
@@ -134,9 +135,9 @@ public:
 		multiset<IOU>::iterator it;
 		string strTmpTarget = "";
 
-		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
+		for (it = m_setIOUsGiven.begin();  it != m_setIOUsGiven.end();  it++)
 		{
-        	if(it->m_strTargetID != strTmpTarget){
+        	if(it->m_strTargetID != strTmpTarget && (owedTo(it->m_strTargetID)-owedFrom(it->m_strTargetID)) > 0){
         		//cout << "adding " << it->m_strTargetID << " to creditors" << endl;
         		vstrCreditors.push_back(it->m_strTargetID);
         		strTmpTarget = it->m_strTargetID;
@@ -150,10 +151,10 @@ public:
 		multiset<IOU>::iterator it;
 		string strTmpSource = "";
 
-		for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
+		for (it = m_setIOUsReceived.begin();  it != m_setIOUsReceived.end();  it++)
 		{
 
-			if(it->m_strSourceID != strTmpSource){
+			if(it->m_strSourceID != strTmpSource && (owedFrom(it->m_strSourceID)-owedTo(it->m_strSourceID)) > 0){
         		//cout << "adding " << it->m_strSourceID << " to debtors" << endl;
         		vstrDebtors.push_back(it->m_strSourceID);
         		strTmpSource = it->m_strSourceID;
@@ -166,7 +167,7 @@ public:
 		float fTotal = 0.0;
 		multiset<IOU>::iterator it;
 
-		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
+		for (it = m_setIOUsGiven.begin();  it != m_setIOUsGiven.end();  it++)
 		{
         	if(it->m_strTargetID == target){
         		fTotal += it->m_fAmount;
@@ -179,7 +180,7 @@ public:
 			float fTotal = 0.0;
 			multiset<IOU>::iterator it;
 
-			for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
+			for (it = m_setIOUsReceived.begin();  it != m_setIOUsReceived.end();  it++)
 			{
 	        	if(it->m_strSourceID == source){
 	        		fTotal += it->m_fAmount;
@@ -189,7 +190,7 @@ public:
 			return fTotal;
 	}
 	void giveIOU(IOU iou){
-		m_setIOUsDebet.insert(iou);
+		m_setIOUsGiven.insert(iou);
 		//m_fBalance -= iou.getAmount();
 
 		map<string, Account>::iterator it;
@@ -202,7 +203,7 @@ public:
 		it = mapAccounts.find(iou.m_strTargetID);
 
 		//cout << "account from map: " << it->second.m_ID << " " << it->second.m_fBalance << endl;
-		it->second.m_setIOUsCredit.insert(iou);
+		it->second.m_setIOUsReceived.insert(iou);
 		it->second.m_fBalance += iou.getAmount();
 
 		if(it->second.owedFrom(iou.m_strTargetID)<=0){
@@ -242,64 +243,66 @@ public:
 
 	IOU deleteIOU(IOU iou){
 			//m_fBalance -= iou.getAmount();
-			m_setIOUsDebet.erase(iou);
+			m_setIOUsGiven.erase(iou);
 			balance();
 			return iou;
 	}
 
 	void cancelOut(string debtor, string creditor, float amount){
+
 		//cout << "\t\t" << m_ID << " is now cancelling " << amount << " from " << debtor << " and " << creditor << endl;
 		multiset<IOU>::iterator it;
 		float remainingAmount = amount;
-		for (it = m_setIOUsDebet.begin();  it != m_setIOUsDebet.end();  it++)
+		for (it = m_setIOUsGiven.begin();  it != m_setIOUsGiven.end();  it++)
 		{
 			if(it->m_strTargetID == debtor && remainingAmount > 0){
-				cout << "debet remaining amount " << remainingAmount << endl;
 				if(it->m_fAmount >= remainingAmount){
         			IOU iou = *it;
         			iou.m_fAmount -= remainingAmount;
         			remainingAmount = 0;
-        			m_setIOUsDebet.erase(it);
+        			m_setIOUsGiven.erase(it);
         			if(iou.m_fAmount > 0){
-        				m_setIOUsDebet.insert(iou);
-        				it = m_setIOUsDebet.begin();
+        				m_setIOUsGiven.insert(iou);
+        				it = m_setIOUsGiven.begin();
         			}
         		}
         		else if(it->m_fAmount < remainingAmount){
         			remainingAmount -= it->m_fAmount;
         			string strEdge = it->m_strSourceID + "-" + it->m_strTargetID;
-        			m_setIOUsDebet.erase(it);
+        			m_setIOUsGiven.erase(it);
         		}
         	}
 		}
 
 		remainingAmount = amount;
-		for (it = m_setIOUsCredit.begin();  it != m_setIOUsCredit.end();  it++)
+		for (it = m_setIOUsReceived.begin();  it != m_setIOUsReceived.end();  it++)
 		{
+
 			if(it->m_strSourceID == creditor && remainingAmount > 0){
-				cout << "credit remaining amount " << remainingAmount << endl;
 				if(it->m_fAmount >= remainingAmount){
 					IOU iou = *it;
-        			iou.m_fAmount -= remainingAmount;
+					iou.m_fAmount -= remainingAmount;
         			remainingAmount = 0;
         			deleteEdge(iou.m_strSourceID + "-" + iou.m_strTargetID);
-        			m_setIOUsCredit.erase(it);
+        			m_setIOUsReceived.erase(it);
         			if(iou.m_fAmount > 0){
-        				m_setIOUsCredit.insert(iou);
+        				m_setIOUsReceived.insert(iou);
         				addEdge(iou.m_strSourceID + "-" + iou.m_strTargetID, iou.m_strSourceID, iou.m_strTargetID, owedFrom(iou.m_strSourceID));
-        				it = m_setIOUsCredit.begin();
+        				it = m_setIOUsReceived.begin();
         			}
         		}
         		else if(it->m_fAmount < remainingAmount){
         			remainingAmount -= it->m_fAmount;
         			string strEdge = it->m_strSourceID + "-" + it->m_strTargetID;
         			deleteEdge(strEdge);
-        			m_setIOUsCredit.erase(it);
+        			m_setIOUsReceived.erase(it);
         		}
         	}
 		}
 		balance();
-		validateNetwork();
+
+
+		//validateNetwork();
 	}
 
 
@@ -407,6 +410,17 @@ int main() {
 		//vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
 		//vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
 		vIOUdefault.push_back(IOU(string("C"), string("A"), 1));
+		vIOUdefault.push_back(IOU(string("C"), string("A"), 1));
+
+
+		vIOUdefault.push_back(IOU(string("A"), string("B"), 7));
+		vIOUdefault.push_back(IOU(string("B"), string("C"), 6));
+		vIOUdefault.push_back(IOU(string("C"), string("D"), 5));
+		vIOUdefault.push_back(IOU(string("D"), string("E"), 4));
+		vIOUdefault.push_back(IOU(string("E"), string("C"), 3));
+		vIOUdefault.push_back(IOU(string("C"), string("F"), 2));
+		vIOUdefault.push_back(IOU(string("F"), string("A"), 1));
+
 
 			/*
 			vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
@@ -491,8 +505,15 @@ int main() {
 			}
 
 			cout << i+1 << ": ";
-			newTransaction(iou);
-			output << iou.m_strSourceID << ";" << iou.m_fAmount << ";" << iou.m_strTargetID << endl;
+
+			if(iou.m_fAmount >= 0.01){
+				newTransaction(iou);
+				output << iou.m_strSourceID << ";" << iou.m_fAmount << ";" << iou.m_strTargetID << endl;
+			}
+			else{
+				i--;
+				continue;
+			}
 		}
 	}
 
@@ -503,12 +524,12 @@ int main() {
 		Account cAccount = (*it).second;
 		cout << (*it).first << " balance: " << cAccount.m_fBalance << endl;
 		multiset<IOU>::iterator it2;
-		for ( it2 = cAccount.m_setIOUsDebet.begin(); it2 != cAccount.m_setIOUsDebet.end(); ++it2){
+		for ( it2 = cAccount.m_setIOUsGiven.begin(); it2 != cAccount.m_setIOUsGiven.end(); ++it2){
 			IOU cIOU = *it2;
 			cout << "\tgiven to " << cIOU.m_strTargetID << ": " << cIOU.m_fAmount << endl;
 		}
 
-		for ( it2 = cAccount.m_setIOUsCredit.begin(); it2 != cAccount.m_setIOUsCredit.end(); ++it2){
+		for ( it2 = cAccount.m_setIOUsReceived.begin(); it2 != cAccount.m_setIOUsReceived.end(); ++it2){
 			IOU cIOU = *it2;
 			cout << "\treceived from " << cIOU.m_strSourceID << ": " << cIOU.m_fAmount << endl;
 		}
@@ -764,16 +785,26 @@ void cancelOutCycle(cycle cycle){
 
 		map<string, Account>::iterator it;
 		it = mapAccounts.find(cycle.vstrCycle.at(i));
+		string debtor, creditor;
 
 		if(i == 0){
-			it->second.cancelOut(cycle.vstrCycle.at(cycle.vstrCycle.size()-1), cycle.vstrCycle.at(1), cycle.fLCD);
+			debtor = cycle.vstrCycle.at(cycle.vstrCycle.size()-1);
+			creditor = cycle.vstrCycle.at(1);
 		}
 		else if(i == (cycle.vstrCycle.size()-1)){
-			it->second.cancelOut(cycle.vstrCycle.at(i-1), cycle.vstrCycle.at(0), cycle.fLCD);
+			debtor = cycle.vstrCycle.at(i-1);
+			creditor = cycle.vstrCycle.at(0);
 		}
 		else{
-			it->second.cancelOut(cycle.vstrCycle.at(i-1), cycle.vstrCycle.at(i+1), cycle.fLCD);
+			debtor = cycle.vstrCycle.at(i-1);
+			creditor = cycle.vstrCycle.at(i+1);
 		}
+
+		it->second.cancelOut(debtor, creditor, cycle.fLCD);
+		validateOwedFromTo(it->second.m_ID, creditor);
+		validateOwedFromTo(debtor, it->second.m_ID);
+
+
 	}
 
 	validateNetwork();
@@ -801,6 +832,7 @@ bool validateNetwork(){
 	float fNetworkBalance = it->second.m_fBalance;
 	if(isEqual(fabs(fNetworkBalance), totalBalance) ){
 		bOk = true;
+
 	}
 	else{
 		cout << "Network balance check failed!" << endl;
@@ -809,6 +841,29 @@ bool validateNetwork(){
 		cout << "difference: " << fabs(fNetworkBalance) - totalBalance << endl;
 		char ch;
 		cin >> ch;
+	}
+
+	return bOk;
+}
+
+bool validateOwedFromTo(string a, string b){
+	bool bOk = false;
+
+	map<string,Account>::iterator itA, itB;
+	itA = mapAccounts.find(a);
+	itB = mapAccounts.find(b);
+
+	if(isEqual(itA->second.owedTo(b), itB->second.owedFrom(a)) ){
+		bOk = true;
+		cout << "\tcheck OK" << endl;
+	}
+	else{
+		cout << "check failed: owed from is not equal to owed to" << endl;
+		cout << a << " owes " << itA->second.owedTo(b) << " to " << b << endl;
+		cout << b << " owes " << itB->second.owedTo(a) << " from " << a << endl;
+		char ch;
+		cin >> ch;
+
 	}
 
 	return bOk;
