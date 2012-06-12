@@ -38,6 +38,8 @@ void deleteEdge(string ID);
 void StringExplode(std::string str, std::string separator, std::vector<std::string>* results);
 cycle StronglyConnected(string v, string w, long long amount);
 void cancelOutCycle(cycle cycle);
+
+
 bool validateNetwork();
 bool validateOwedFromTo(string a, string b);
 
@@ -103,6 +105,8 @@ public:
 
 void newTransaction(IOU iou);
 IOU randomIOU();
+IOU optimalCycle(string source);
+long long profit(cycle cycle);
 
 class Account;
 
@@ -149,13 +153,13 @@ public:
 		}
 		llBalance = llCredit -llDebet;
 
-		if(llBalance < 0 && m_ID != string("IOU")){
+		/*if(llBalance < 0 && m_ID != string("IOU")){
 			cout << "account balance check failed!" << endl;
 			cout << "balance of " << m_ID << "= " << llBalance << endl;
 			cout << llCredit << " " << llDebet << endl;
  			char ch;
 			//cin >> ch;
-		}
+		}*/
 		setBalance(llBalance);
 		return llBalance;
 	}
@@ -276,6 +280,10 @@ public:
 
 		balance();
 		changeNode(m_ID, label(), getBalance());
+
+		if(iou.m_strSourceID != string("IOU")){
+			optimalCycle(iou.m_strTargetID);
+		}
 
 	}
 
@@ -629,8 +637,11 @@ IOU randomIOU(){
 			float fSigma = 3.0;
 			llAmount = box_muller(fMedian, fSigma);
 
-			if(llAmount < 0)
+			if(llAmount < 0){
 				llAmount = llAmount * -1;
+			}
+
+			llAmount = llAmount * 100;
 
 			ss << llAmount << ";" ;
 			ssAmount << llAmount ;
@@ -841,6 +852,51 @@ void cancelOutCycle(cycle cycle){
 	validateNetwork();
 }
 
+IOU optimalCycle(string source){
+	IOU iou = IOU(string(""), string(""), 0 );
+	map<string,Account>::iterator it;
+
+	cycle sOptimalCycle;
+
+	it = mapAccounts.find(source);
+
+	sOptimalCycle.llLCD = it->second.getBalance();
+
+	sOptimalCycle.vstrCycle.push_back(source);
+	long long llLastProfit = 0;
+
+	do{
+		llLastProfit = profit(sOptimalCycle);
+		it = mapAccounts.find(sOptimalCycle.vstrCycle.at(sOptimalCycle.vstrCycle.size()-1));
+		if(it != mapAccounts.end()){
+
+			vector<string> debtors = it->second.debtors();
+			if(debtors.at(0) != string("IOU")){
+				sOptimalCycle.vstrCycle.push_back(debtors.at(0));
+				if(sOptimalCycle.llLCD > it->second.owedFrom(debtors.at(0))){
+					sOptimalCycle.llLCD = it->second.owedFrom(debtors.at(0));
+				}
+			}
+
+		}
+	} while (profit(sOptimalCycle) > llLastProfit);
+
+	cout << "Optimal cycle: " ;
+	for(unsigned int i = 0; i < sOptimalCycle.vstrCycle.size(); i++){
+		cout << sOptimalCycle.vstrCycle.at(i) << ", ";
+	}
+	cout << "profit: " << profit(sOptimalCycle) << endl;
+
+	return iou;
+}
+
+long long profit(cycle cycle){
+	long long llProfit;
+
+	llProfit = (cycle.vstrCycle.size()-1) * (cycle.llLCD/100);
+	//cout << llProfit << endl;
+	return llProfit;
+}
 
 bool validateNetwork(){
 	bool bOk = false;
