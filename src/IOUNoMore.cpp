@@ -55,6 +55,9 @@ double GaussianDistribution(double x, double mu, double sigma){
 }
 
 static unsigned long long llIOUID = 1 ;
+static long long llTotalIOUamount = 0;
+static long long llTotalAmountCancelledOut = 0;
+
 
 class IOU{
 
@@ -197,13 +200,31 @@ public:
 		for (it = m_setIOUsReceived.begin();  it != m_setIOUsReceived.end();  it++)
 		{
 
-			if(it->m_strSourceID != strTmpSource && (owedFrom(it->m_strSourceID)-owedTo(it->m_strSourceID)) > 0){
+			if(it->m_strSourceID != string("IOU") && it->m_strSourceID != strTmpSource && (owedFrom(it->m_strSourceID)-owedTo(it->m_strSourceID)) > 0){
         		//cout << "adding " << it->m_strSourceID << " to debtors" << endl;
         		vstrDebtors.push_back(it->m_strSourceID);
         		strTmpSource = it->m_strSourceID;
         	}
 		}
 		return vstrDebtors;
+	}
+
+	string maxDebtor(){
+		multiset<IOU>::iterator it;
+		string strTmpSource = "";
+		long long maxOwedFrom  = 0;
+		string maxDebtor = "";
+
+		for (it = m_setIOUsReceived.begin();  it != m_setIOUsReceived.end();  it++)
+		{
+			if(it->m_strSourceID != strTmpSource && (owedFrom(it->m_strSourceID)-owedTo(it->m_strSourceID)) > maxOwedFrom){
+        		strTmpSource = it->m_strSourceID;
+        		maxOwedFrom = owedFrom(it->m_strSourceID)-owedTo(it->m_strSourceID);
+        		maxDebtor = it->m_strSourceID;
+			}
+		}
+
+		return maxDebtor;
 	}
 
 	long long owedTo(string target){
@@ -272,6 +293,7 @@ public:
 
 			cancelOutCycle(sCycle);
 			llCanceledOut += sCycle.llLCD;
+			llTotalAmountCancelledOut += sCycle.llLCD * sCycle.vstrCycle.size();
 			cout << "\t\t" << llCanceledOut << " of " << iou.getAmount() << " has been cancelled out." << endl;
 
 			sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.getAmount()-llCanceledOut);
@@ -284,6 +306,9 @@ public:
 		if(iou.m_strSourceID != string("IOU")){
 			optimalCycle(iou.m_strTargetID);
 		}
+
+		cout << "total amount: " << llTotalIOUamount << endl;
+		cout << "total cancelled out: " << llTotalAmountCancelledOut << endl;
 
 	}
 
@@ -459,10 +484,15 @@ int main() {
 
 */
 
-			vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
-			vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
-			vIOUdefault.push_back(IOU(string("C"), string("A"), 1));
-/*
+			vIOUdefault.push_back(IOU(string("A"), string("B"), 200));
+			vIOUdefault.push_back(IOU(string("B"), string("C"), 200));
+			vIOUdefault.push_back(IOU(string("C"), string("D"), 200));
+			vIOUdefault.push_back(IOU(string("D"), string("E"), 200));
+			vIOUdefault.push_back(IOU(string("E"), string("F"), 200));
+			vIOUdefault.push_back(IOU(string("Aminus"), string("B"), 100));
+			//vIOUdefault.push_back(IOU(string("Amajor"), string("B"), 300));
+			vIOUdefault.push_back(IOU(string("F"), string("G"), 200));
+			/*
 			vIOUdefault.push_back(IOU(string("D"), string("E"), 1));
 			vIOUdefault.push_back(IOU(string("E"), string("F"), 1));
 			vIOUdefault.push_back(IOU(string("F"), string("G"), 1));
@@ -586,6 +616,7 @@ void newTransaction(IOU iou){
 
 	if(iou.m_strSourceID != string("IOU")){
 		cout << "New transaction: " << endl;
+		llTotalIOUamount += iou.m_llAmount;
 	}
 
 	iou.setID(llIOUID++);
@@ -677,6 +708,8 @@ IOU randomIOU(){
 void addNode(string ID, string label, float size = 1 ){
 	stringstream ss;
 
+	size = size/100;
+
 	if(ID == string("IOU")){
 			size = 100;
 	}
@@ -690,6 +723,8 @@ void addNode(string ID, string label, float size = 1 ){
 void addEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
+	weight = weight/100;
+
 	ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
 	ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}' -s -o 'curlOutput.txt'";
 	system(ss.str().c_str());
@@ -698,6 +733,8 @@ void addEdge(string ID, string source, string target, float weight = 1 ){
 
 void changeNode(string ID, string label, float size = 1 ){
 	stringstream ss;
+
+	size = size/100;
 
 	if(ID == string("IOU")){
 		size = 100;
@@ -711,6 +748,8 @@ void changeNode(string ID, string label, float size = 1 ){
 
 void changeEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
+
+	weight = weight/100;
 
 	ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
 	ss << "'{\"ce\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}' -s -o 'curlOutput.txt'";
@@ -870,11 +909,11 @@ IOU optimalCycle(string source){
 		it = mapAccounts.find(sOptimalCycle.vstrCycle.at(sOptimalCycle.vstrCycle.size()-1));
 		if(it != mapAccounts.end()){
 
-			vector<string> debtors = it->second.debtors();
-			if(debtors.at(0) != string("IOU")){
-				sOptimalCycle.vstrCycle.push_back(debtors.at(0));
-				if(sOptimalCycle.llLCD > it->second.owedFrom(debtors.at(0))){
-					sOptimalCycle.llLCD = it->second.owedFrom(debtors.at(0));
+			string maxDebtor = it->second.maxDebtor();
+			if(maxDebtor != string("IOU")){
+				sOptimalCycle.vstrCycle.push_back(maxDebtor);
+				if(sOptimalCycle.llLCD > it->second.owedFrom(maxDebtor)){
+					sOptimalCycle.llLCD = it->second.owedFrom(maxDebtor);
 				}
 			}
 
