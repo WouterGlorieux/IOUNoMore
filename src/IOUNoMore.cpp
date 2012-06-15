@@ -108,6 +108,8 @@ public:
 
 void newTransaction(IOU iou);
 IOU randomIOU();
+
+vector<cycle> possibleDebtorChains(string source);
 IOU optimalCycle(string source);
 long long profit(cycle cycle);
 
@@ -304,7 +306,8 @@ public:
 		changeNode(m_ID, label(), getBalance());
 
 		if(iou.m_strSourceID != string("IOU")){
-			optimalCycle(iou.m_strTargetID);
+			possibleDebtorChains(iou.m_strSourceID);
+			//optimalCycle(iou.m_strTargetID);
 		}
 
 		cout << "total amount: " << llTotalIOUamount << endl;
@@ -788,36 +791,14 @@ cycle StronglyConnected(string v, string w, long long amount){
 
 	map<string, Account>::iterator it;
 	while(listOpen.size()>0 && !stronglyConnected){
-
-
 		strNode = listOpen.front();
 		listOpen.pop_front();
-		//cout << v << " open node: " << strNode << endl;
 		listClosed.push_back(strNode);
-/*
-		//display open and closed list
-		list<string>::const_iterator listIt;
-		cout << v << "->" << w << endl;
-		cout << "list open: " ;
-		for (listIt = listOpen.begin();  listIt != listOpen.end();  listIt++)
-		{
-			cout << *listIt << ", ";
-		}
-		cout << endl << "list closed: ";
-		for (listIt = listClosed.begin();  listIt != listClosed.end();  listIt++)
-		{
-			cout << *listIt << ", ";
-		}
-		cout << endl;
-*/
-
 
 		if(v != strNode){
-			//cout << v << " not equal to " << strNode << endl;
 			it = mapAccounts.find(strNode);
 			vector<string> vstrCreditors;
 			vstrCreditors = it->second.creditors();
-			//cout << strNode << " has " << vstrCreditors.size() << " creditors" << endl;
 			for(unsigned int i=0; i<vstrCreditors.size(); i++){
 				if(std::find(listClosed.begin(), listClosed.end(), vstrCreditors.at(i)) == listClosed.end()){
 					listOpen.push_back(vstrCreditors.at(i));
@@ -827,8 +808,6 @@ cycle StronglyConnected(string v, string w, long long amount){
 		else{
 			stronglyConnected = true;
 			list<string>::reverse_iterator listIt;
-
-
 			string strNode = listClosed.back();
 			vstrCycle.push_back(strNode);
 			for (listIt = listClosed.rbegin();  listIt != listClosed.rend();  listIt++)
@@ -838,7 +817,6 @@ cycle StronglyConnected(string v, string w, long long amount){
 				vstrDebtors = it->second.debtors();
 
 				if(std::find(vstrDebtors.begin(), vstrDebtors.end(), *listIt)!=vstrDebtors.end()){
-					//cout << "found " << *listIt << " among debtors of " << strNode << endl;
 					vstrCycle.push_back(*listIt);
 					strNode = *listIt;
 
@@ -846,10 +824,8 @@ cycle StronglyConnected(string v, string w, long long amount){
 					if(llOwedFrom < sCycle.llLCD){
 						sCycle.llLCD = llOwedFrom;
 					}
-
 				}
 			}
-
 		}
 	}
 
@@ -889,6 +865,72 @@ void cancelOutCycle(cycle cycle){
 	}
 
 	validateNetwork();
+}
+
+vector<cycle> possibleDebtorChains(string source){
+	vector<cycle> vsDebtorChains;
+
+	cycle sCycle;
+
+	list<string> listOpen;
+	list<string> listClosed;
+	vector<string> vstrCycle;
+
+	listOpen.push_back(source);
+
+	string strNode = "";
+
+	map<string, Account>::iterator it;
+	while(listOpen.size()>0 ){
+		vstrCycle.clear();
+		strNode = listOpen.front();
+		listOpen.pop_front();
+		listClosed.push_back(strNode);
+
+		it = mapAccounts.find(strNode);
+		vector<string> vstrDebtors;
+		vstrDebtors = it->second.debtors();
+		for(unsigned int i=0; i<vstrDebtors.size(); i++){
+			if(std::find(listClosed.begin(), listClosed.end(), vstrDebtors.at(i)) == listClosed.end()){
+				listOpen.push_back(vstrDebtors.at(i));
+			}
+		}
+
+		list<string>::reverse_iterator listIt;
+		string strNode = listClosed.back();
+		vstrCycle.push_back(strNode);
+		for (listIt = listClosed.rbegin();  listIt != listClosed.rend();  listIt++)
+		{
+			it = mapAccounts.find(strNode);
+			vector<string> vstrCreditors;
+			vstrCreditors = it->second.creditors();
+			if(std::find(vstrCreditors.begin(), vstrCreditors.end(), *listIt)!=vstrCreditors.end()){
+				vstrCycle.push_back(*listIt);
+				strNode = *listIt;
+				long long llOwedTo = it->second.owedTo(*listIt);
+				if(llOwedTo < sCycle.llLCD){
+					sCycle.llLCD = llOwedTo;
+				}
+			}
+		}
+		sCycle.vstrCycle = vstrCycle;
+		vsDebtorChains.push_back(sCycle);
+	}
+
+	cout << "Possible debtor chains: " << endl;
+	for(unsigned int i = 0; i < vsDebtorChains.size(); i++){
+		cycle debtorChain = vsDebtorChains.at(i);
+		cout << debtorChain.llLCD << "\t-> " ;
+
+		for(unsigned int j = 0; j< debtorChain.vstrCycle.size(); j++){
+			cout << debtorChain.vstrCycle.at(j) << ", " ;
+		}
+		cout << endl;
+	}
+
+
+
+	return vsDebtorChains;
 }
 
 IOU optimalCycle(string source){
