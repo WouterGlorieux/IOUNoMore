@@ -110,7 +110,7 @@ void newTransaction(IOU iou);
 IOU randomIOU();
 
 vector<cycle> possibleDebtorChains(string source);
-IOU optimalCycle(string source);
+IOU optimalCycle(string source, string target, long long amount);
 long long profit(cycle cycle);
 
 class Account;
@@ -291,7 +291,7 @@ public:
 			for(unsigned int i = 0; i < sCycle.vstrCycle.size(); i++){
 				cout << sCycle.vstrCycle.at(i) << ", " ;
 			}
-			cout << "Value: " << sCycle.llLCD << endl;
+			cout << " LCD: " << sCycle.llLCD  << "\tTotal value: " << sCycle.llLCD * sCycle.vstrCycle.size() << endl;
 
 			cancelOutCycle(sCycle);
 			llCanceledOut += sCycle.llLCD;
@@ -306,8 +306,7 @@ public:
 		changeNode(m_ID, label(), getBalance());
 
 		if(iou.m_strSourceID != string("IOU")){
-			possibleDebtorChains(iou.m_strSourceID);
-			//optimalCycle(iou.m_strTargetID);
+			optimalCycle(iou.m_strSourceID, iou.m_strTargetID, iou.m_llAmount-llCanceledOut);
 		}
 
 		cout << "total amount: " << llTotalIOUamount << endl;
@@ -487,14 +486,14 @@ int main() {
 
 */
 
-			vIOUdefault.push_back(IOU(string("A"), string("B"), 200));
-			vIOUdefault.push_back(IOU(string("B"), string("C"), 200));
-			vIOUdefault.push_back(IOU(string("C"), string("D"), 200));
-			vIOUdefault.push_back(IOU(string("D"), string("E"), 200));
-			vIOUdefault.push_back(IOU(string("E"), string("F"), 200));
-			vIOUdefault.push_back(IOU(string("Aminus"), string("B"), 100));
+			vIOUdefault.push_back(IOU(string("A"), string("B"), 100));
+			vIOUdefault.push_back(IOU(string("B"), string("C"), 100));
+			//vIOUdefault.push_back(IOU(string("C"), string("D"), 100));
+			vIOUdefault.push_back(IOU(string("D"), string("E"), 100));
+			vIOUdefault.push_back(IOU(string("E"), string("F"), 100));
+			vIOUdefault.push_back(IOU(string("C"), string("D"), 100));
 			//vIOUdefault.push_back(IOU(string("Amajor"), string("B"), 300));
-			vIOUdefault.push_back(IOU(string("F"), string("G"), 200));
+			//vIOUdefault.push_back(IOU(string("F"), string("G"), 200));
 			/*
 			vIOUdefault.push_back(IOU(string("D"), string("E"), 1));
 			vIOUdefault.push_back(IOU(string("E"), string("F"), 1));
@@ -867,22 +866,86 @@ void cancelOutCycle(cycle cycle){
 	validateNetwork();
 }
 
-vector<cycle> possibleDebtorChains(string source){
-	vector<cycle> vsDebtorChains;
-
-	cycle sCycle;
+vector<cycle> possibleCreditorChains(string source){
+	vector<cycle> vsCreditorChains;
 
 	list<string> listOpen;
 	list<string> listClosed;
-	vector<string> vstrCycle;
 
-	listOpen.push_back(source);
-
+	listOpen.push_front(source);
 	string strNode = "";
-
 	map<string, Account>::iterator it;
+
 	while(listOpen.size()>0 ){
-		vstrCycle.clear();
+		cycle sCycle;
+		vector<string> vstrCycle;
+		sCycle.llLCD = -1;
+
+		strNode = listOpen.front();
+		listOpen.pop_front();
+		listClosed.push_back(strNode);
+
+		it = mapAccounts.find(strNode);
+		vector<string> vstrCreditors;
+		vstrCreditors = it->second.creditors();
+		for(unsigned int i=0; i<vstrCreditors.size(); i++){
+			if(std::find(listClosed.begin(), listClosed.end(), vstrCreditors.at(i)) == listClosed.end()){
+				listOpen.push_back(vstrCreditors.at(i));
+			}
+		}
+
+		list<string>::reverse_iterator listIt;
+		string strNode = listClosed.back();
+		vstrCycle.push_back(strNode);
+		for (listIt = listClosed.rbegin();  listIt != listClosed.rend();  listIt++)
+		{
+			it = mapAccounts.find(strNode);
+			vector<string> vstrDebtors;
+			vstrDebtors = it->second.debtors();
+			if(std::find(vstrDebtors.begin(), vstrDebtors.end(), *listIt)!=vstrDebtors.end()){
+				vstrCycle.push_back(*listIt);
+				strNode = *listIt;
+				long long llOwedFrom = it->second.owedFrom(*listIt);
+				if(llOwedFrom < sCycle.llLCD || sCycle.llLCD == -1){
+					sCycle.llLCD = llOwedFrom;
+				}
+			}
+		}
+		sCycle.vstrCycle = vstrCycle;
+		vsCreditorChains.push_back(sCycle);
+	}
+/*
+	cout << "Possible creditor chains: " << endl;
+	for(unsigned int i = 0; i < vsCreditorChains.size(); i++){
+		cycle creditorChain = vsCreditorChains.at(i);
+		cout << creditorChain.llLCD << "\t-> " ;
+
+		for(unsigned int j = 0; j< creditorChain.vstrCycle.size(); j++){
+			cout << creditorChain.vstrCycle.at(j) << ", " ;
+		}
+		cout << endl;
+	}
+*/
+
+	return vsCreditorChains;
+}
+
+
+vector<cycle> possibleDebtorChains(string source){
+	vector<cycle> vsDebtorChains;
+
+	list<string> listOpen;
+	list<string> listClosed;
+
+	listOpen.push_front(source);
+	string strNode = "";
+	map<string, Account>::iterator it;
+
+	while(listOpen.size()>0 ){
+		cycle sCycle;
+		vector<string> vstrCycle;
+		sCycle.llLCD = -1;
+
 		strNode = listOpen.front();
 		listOpen.pop_front();
 		listClosed.push_back(strNode);
@@ -908,7 +971,7 @@ vector<cycle> possibleDebtorChains(string source){
 				vstrCycle.push_back(*listIt);
 				strNode = *listIt;
 				long long llOwedTo = it->second.owedTo(*listIt);
-				if(llOwedTo < sCycle.llLCD){
+				if(llOwedTo < sCycle.llLCD || sCycle.llLCD == -1){
 					sCycle.llLCD = llOwedTo;
 				}
 			}
@@ -917,7 +980,7 @@ vector<cycle> possibleDebtorChains(string source){
 		vsDebtorChains.push_back(sCycle);
 	}
 
-	cout << "Possible debtor chains: " << endl;
+/*	cout << "Possible debtor chains: " << endl;
 	for(unsigned int i = 0; i < vsDebtorChains.size(); i++){
 		cycle debtorChain = vsDebtorChains.at(i);
 		cout << debtorChain.llLCD << "\t-> " ;
@@ -927,46 +990,93 @@ vector<cycle> possibleDebtorChains(string source){
 		}
 		cout << endl;
 	}
-
-
+*/
 
 	return vsDebtorChains;
 }
 
-IOU optimalCycle(string source){
-	IOU iou = IOU(string(""), string(""), 0 );
-	map<string,Account>::iterator it;
+cycle bestChain(vector<cycle> possibleChains){
+	cycle bestChain;
+	long long llValue = 0;
 
-	cycle sOptimalCycle;
+	for(unsigned int i = 0; i < possibleChains.size(); i++){
+		if(possibleChains.at(i).llLCD != -1 && possibleChains.at(i).llLCD * possibleChains.at(i).vstrCycle.size() > llValue){
+			bestChain = possibleChains.at(i);
+			llValue = possibleChains.at(i).llLCD * possibleChains.at(i).vstrCycle.size();
+		}
+	}
 
-	it = mapAccounts.find(source);
+	return bestChain;
+}
 
-	sOptimalCycle.llLCD = it->second.getBalance();
+IOU optimalCycle(string source, string target, long long amount){
+	IOU iou = IOU(string(""), string(""), 0);
 
-	sOptimalCycle.vstrCycle.push_back(source);
-	long long llLastProfit = 0;
+	vector<cycle> vsPossibleDebtorChains = possibleDebtorChains(source);
+	vector<cycle> vsPossibleCreditorChains = possibleCreditorChains(target);
 
-	do{
-		llLastProfit = profit(sOptimalCycle);
-		it = mapAccounts.find(sOptimalCycle.vstrCycle.at(sOptimalCycle.vstrCycle.size()-1));
-		if(it != mapAccounts.end()){
+	vector<cycle> vsPossibleChains;
 
-			string maxDebtor = it->second.maxDebtor();
-			if(maxDebtor != string("IOU")){
-				sOptimalCycle.vstrCycle.push_back(maxDebtor);
-				if(sOptimalCycle.llLCD > it->second.owedFrom(maxDebtor)){
-					sOptimalCycle.llLCD = it->second.owedFrom(maxDebtor);
-				}
+	for(unsigned int i = 0; i < vsPossibleDebtorChains.size(); i++){
+		cycle sTempChain;
+
+		for(unsigned int j = 0; j < vsPossibleCreditorChains.size(); j++){
+			sTempChain = vsPossibleDebtorChains.at(i);
+			cycle sTempCycle = vsPossibleCreditorChains.at(j);
+
+
+			if(sTempCycle.llLCD != -1 && sTempCycle.llLCD < sTempChain.llLCD){
+				sTempChain.llLCD = sTempCycle.llLCD;
+			}
+			if(amount < sTempChain.llLCD){
+				sTempChain.llLCD = amount;
 			}
 
-		}
-	} while (profit(sOptimalCycle) > llLastProfit);
 
-	cout << "Optimal cycle: " ;
-	for(unsigned int i = 0; i < sOptimalCycle.vstrCycle.size(); i++){
-		cout << sOptimalCycle.vstrCycle.at(i) << ", ";
+
+			for(int k = sTempCycle.vstrCycle.size()-1; k >= 0; k--){
+				sTempChain.vstrCycle.push_back(sTempCycle.vstrCycle.at(k));
+			}
+			vsPossibleChains.push_back(sTempChain);
+		}
 	}
-	cout << "profit: " << profit(sOptimalCycle) << endl;
+
+
+	cycle vsOptimalChain = bestChain(vsPossibleChains);
+
+	if(vsOptimalChain.llLCD != -1 && vsOptimalChain.vstrCycle.size() >= 6){
+		cout << "Optimal chain: " ;
+		for(unsigned int i = 0; i < vsOptimalChain.vstrCycle.size(); i++){
+			cout << vsOptimalChain.vstrCycle.at(i) << ", " ;
+		}
+		cout << endl << "LCD: " << vsOptimalChain.llLCD << "\tTotal value: " << vsOptimalChain.llLCD * vsOptimalChain.vstrCycle.size() << endl;
+		cout << endl ;
+
+		iou.m_strTargetID = vsOptimalChain.vstrCycle.at(0);
+		iou.m_strSourceID = vsOptimalChain.vstrCycle.at(vsOptimalChain.vstrCycle.size()-1);
+		iou.setAmount(vsOptimalChain.llLCD);
+
+
+		newTransaction(iou);
+		for(unsigned int i = 0; i < vsOptimalChain.vstrCycle.size()-1; i++){
+			string strSource = vsOptimalChain.vstrCycle.at(i);
+			string strTarget = vsOptimalChain.vstrCycle.at(vsOptimalChain.vstrCycle.size()-1);
+			long long amount = vsOptimalChain.llLCD / (vsOptimalChain.vstrCycle.size()-1);
+
+			if((amount * 0.01) < 1){
+				amount += 1;
+			}
+			else{
+				amount += (amount * 0.01);
+			}
+
+			cout << strSource << " --> " << strTarget << " : " << amount << endl;
+			newTransaction(IOU(strSource, strTarget, amount));
+		}
+		newTransaction(IOU(iou.m_strSourceID, string("IOUnetwork"), 1));
+	}
+
+
 
 	return iou;
 }
