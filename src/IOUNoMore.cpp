@@ -106,7 +106,7 @@ public:
 
 };
 
-void newTransaction(IOU iou);
+void newTransaction(IOU iou	, bool checkCycle);
 IOU randomIOU();
 
 vector<cycle> possibleDebtorChains(string source);
@@ -255,7 +255,7 @@ public:
 
 			return llTotal;
 	}
-	void giveIOU(IOU iou){
+	void giveIOU(IOU iou, bool checkCycle = true){
 		m_setIOUsGiven.insert(iou);
 		//m_fBalance -= iou.getAmount();
 
@@ -284,31 +284,34 @@ public:
 		}
 
 
-		long long llCanceledOut = 0;
-		cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.getAmount());
-		while(sCycle.vstrCycle.size() >= 2 && llCanceledOut < iou.getAmount()){
-			cout << "\tdetected cycle: " ;
-			for(unsigned int i = 0; i < sCycle.vstrCycle.size(); i++){
-				cout << sCycle.vstrCycle.at(i) << ", " ;
+		if(checkCycle){
+			long long llCanceledOut = 0;
+			cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.getAmount());
+			while(sCycle.vstrCycle.size() >= 2 && llCanceledOut < iou.getAmount()){
+				cout << "\tdetected cycle: " ;
+				for(unsigned int i = 0; i < sCycle.vstrCycle.size(); i++){
+					cout << sCycle.vstrCycle.at(i) << ", " ;
+				}
+				cout << " LCD: " << sCycle.llLCD  << "\tTotal value: " << sCycle.llLCD * sCycle.vstrCycle.size() << endl;
+
+				cancelOutCycle(sCycle);
+				llCanceledOut += sCycle.llLCD;
+				llTotalAmountCancelledOut += sCycle.llLCD * sCycle.vstrCycle.size();
+				cout << "\t\t" << llCanceledOut << " of " << iou.getAmount() << " has been cancelled out." << endl;
+
+				sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.getAmount()-llCanceledOut);
 			}
-			cout << " LCD: " << sCycle.llLCD  << "\tTotal value: " << sCycle.llLCD * sCycle.vstrCycle.size() << endl;
 
-			cancelOutCycle(sCycle);
-			llCanceledOut += sCycle.llLCD;
-			llTotalAmountCancelledOut += sCycle.llLCD * sCycle.vstrCycle.size();
-			cout << "\t\t" << llCanceledOut << " of " << iou.getAmount() << " has been cancelled out." << endl;
-
-			sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.getAmount()-llCanceledOut);
-		}
 		//cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 0, 5).size() << endl;
 
-		balance();
-		changeNode(m_ID, label(), getBalance());
+			balance();
+			changeNode(m_ID, label(), getBalance());
 
-		if(iou.m_strSourceID != string("IOU")){
-			optimalCycle(iou.m_strSourceID, iou.m_strTargetID, iou.m_llAmount-llCanceledOut);
+			if(iou.m_strSourceID != string("IOU")){
+				optimalCycle(iou.m_strSourceID, iou.m_strTargetID, iou.m_llAmount-llCanceledOut);
+			}
+
 		}
-
 		cout << "total amount: " << llTotalIOUamount << endl;
 		cout << "total cancelled out: " << llTotalAmountCancelledOut << endl;
 
@@ -575,7 +578,7 @@ int main() {
 			cout << endl << i+1 << ": ";
 
 			if(iou.getAmount() != 0){
-				newTransaction(iou);
+				newTransaction(iou, true);
 				output << iou.m_strSourceID << ";" << iou.getAmount() << ";" << iou.m_strTargetID << endl;
 			}
 			else{
@@ -614,7 +617,7 @@ int main() {
 	return 0;
 }
 
-void newTransaction(IOU iou){
+void newTransaction(IOU iou, bool checkCycle){
 
 	if(iou.m_strSourceID != string("IOU")){
 		cout << "New transaction: " << endl;
@@ -636,10 +639,10 @@ void newTransaction(IOU iou){
 	it = mapAccounts.find(iou.m_strSourceID);
 
 	if(it->second.balance() < iou.getAmount() && iou.m_strSourceID != string("IOU")){
-		newTransaction(IOU(string("IOU"), iou.m_strSourceID, iou.getAmount()-it->second.getBalance()));
+		newTransaction(IOU(string("IOU"), iou.m_strSourceID, iou.getAmount()-it->second.getBalance()), checkCycle);
 	}
 
-	it->second.giveIOU(iou);
+	it->second.giveIOU(iou, checkCycle);
 
 	validateNetwork();
 }
@@ -1042,26 +1045,34 @@ IOU optimalCycle(string source, string target, long long amount){
 	}
 
 
-	cycle vsOptimalChain = bestChain(vsPossibleChains);
+	cycle sOptimalChain = bestChain(vsPossibleChains);
 
-	if(vsOptimalChain.llLCD != -1 && vsOptimalChain.vstrCycle.size() >= 6){
+	if(sOptimalChain.llLCD != -1 && sOptimalChain.llLCD >= sOptimalChain.vstrCycle.size() && sOptimalChain.vstrCycle.size() >= 6){
 		cout << "Optimal chain: " ;
-		for(unsigned int i = 0; i < vsOptimalChain.vstrCycle.size(); i++){
-			cout << vsOptimalChain.vstrCycle.at(i) << ", " ;
+		for(unsigned int i = 0; i < sOptimalChain.vstrCycle.size(); i++){
+			cout << sOptimalChain.vstrCycle.at(i) << ", " ;
 		}
-		cout << endl << "LCD: " << vsOptimalChain.llLCD << "\tTotal value: " << vsOptimalChain.llLCD * vsOptimalChain.vstrCycle.size() << endl;
+		cout << endl << "LCD: " << sOptimalChain.llLCD << "\tTotal value: " << sOptimalChain.llLCD * sOptimalChain.vstrCycle.size() << endl;
 		cout << endl ;
 
-		iou.m_strTargetID = vsOptimalChain.vstrCycle.at(0);
-		iou.m_strSourceID = vsOptimalChain.vstrCycle.at(vsOptimalChain.vstrCycle.size()-1);
-		iou.setAmount(vsOptimalChain.llLCD);
+		iou.m_strTargetID = sOptimalChain.vstrCycle.at(0);
+		iou.m_strSourceID = sOptimalChain.vstrCycle.at(sOptimalChain.vstrCycle.size()-1);
+		iou.setAmount(sOptimalChain.llLCD);
 
 
-		newTransaction(iou);
-		for(unsigned int i = 0; i < vsOptimalChain.vstrCycle.size()-1; i++){
-			string strSource = vsOptimalChain.vstrCycle.at(i);
-			string strTarget = vsOptimalChain.vstrCycle.at(vsOptimalChain.vstrCycle.size()-1);
-			long long amount = vsOptimalChain.llLCD / (vsOptimalChain.vstrCycle.size()-1);
+		newTransaction(iou, false);
+		cancelOutCycle(sOptimalChain);
+
+		long long llCanceledOut = sOptimalChain.llLCD;
+		llTotalAmountCancelledOut += sOptimalChain.llLCD * sOptimalChain.vstrCycle.size();
+		cout << "\t\t" << llCanceledOut << " has been cancelled out." << endl;
+
+
+
+		for(unsigned int i = 0; i < sOptimalChain.vstrCycle.size()-1; i++){
+			string strSource = sOptimalChain.vstrCycle.at(i);
+			string strTarget = sOptimalChain.vstrCycle.at(sOptimalChain.vstrCycle.size()-1);
+			long long amount = sOptimalChain.llLCD / (sOptimalChain.vstrCycle.size()-1);
 
 			if((amount * 0.01) < 1){
 				amount += 1;
@@ -1071,9 +1082,11 @@ IOU optimalCycle(string source, string target, long long amount){
 			}
 
 			cout << strSource << " --> " << strTarget << " : " << amount << endl;
-			newTransaction(IOU(strSource, strTarget, amount));
+			newTransaction(IOU(strSource, strTarget, amount), true);
+
+
 		}
-		newTransaction(IOU(iou.m_strSourceID, string("IOUnetwork"), 1));
+		newTransaction(IOU(iou.m_strSourceID, string("IOUnetwork"), 1), true);
 	}
 
 
