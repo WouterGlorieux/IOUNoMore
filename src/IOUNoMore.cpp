@@ -110,7 +110,7 @@ void newTransaction(IOU iou	, bool checkCycle);
 IOU randomIOU();
 
 vector<cycle> possibleDebtorChains(string source);
-IOU optimalCycle(string source, string target, long long amount);
+void optimalCycle(string source, string target, long long amount);
 long long profit(cycle cycle);
 
 class Account;
@@ -307,13 +307,15 @@ public:
 			balance();
 			changeNode(m_ID, label(), getBalance());
 
-			if(iou.m_strSourceID != string("IOU")){
+			float fRandom = ranf();
+
+			if(fRandom < 0.1 && iou.m_strSourceID != string("IOU") && checkCycle){
 				optimalCycle(iou.m_strSourceID, iou.m_strTargetID, iou.m_llAmount-llCanceledOut);
 			}
 
 		}
-		cout << "total amount: " << llTotalIOUamount << endl;
-		cout << "total cancelled out: " << llTotalAmountCancelledOut << endl;
+		//cout << "total amount: " << llTotalIOUamount << endl;
+		//cout << "total cancelled out: " << llTotalAmountCancelledOut << endl;
 
 	}
 
@@ -354,7 +356,7 @@ public:
         		}
         	}
 		}
-
+		balance();
 	}
 
 	void reduceIOUto(long long IOUID, long long amount){
@@ -371,6 +373,7 @@ public:
 				break;
         	}
 		}
+		balance();
 	}
 
 	string label(){
@@ -411,6 +414,10 @@ int main() {
 
 	std::string strOutputFileName = "output.txt";
 	std::ofstream output(strOutputFileName.c_str());
+
+	std::string strAnalysisFileName = "analysis.txt";
+	std::ofstream analysis(strAnalysisFileName.c_str());
+
 
 	//int nDebts = 100;    				//total number of debts
 	int nStatisticGroups = 10; 		//number of groups for statistical purposes
@@ -580,15 +587,25 @@ int main() {
 			if(iou.getAmount() != 0){
 				newTransaction(iou, true);
 				output << iou.m_strSourceID << ";" << iou.getAmount() << ";" << iou.m_strTargetID << endl;
+
+				analysis << i+1 << ";";
+				analysis << llTotalIOUamount << ";" ;
+				analysis << llTotalAmountCancelledOut << ";" ;
+				analysis << (float)llTotalAmountCancelledOut/llTotalIOUamount << ";" ;
+				analysis << endl;
+
 			}
 			else{
 				i--;
 				continue;
 			}
+
+
 		}
 	}
 
 	//list all accounts with their balance
+	validateNetwork();
 	long long totalBalance = 0;
 	for( map<string,Account>::iterator it=mapAccounts.begin(); it!=mapAccounts.end(); ++it)
 	{
@@ -853,6 +870,8 @@ void cancelOutCycle(cycle cycle){
 			debtor = cycle.vstrCycle.at(i+1);
 		}
 
+		//cout << it->second.m_ID << " is now reducing " << debtor << "'s debt." << endl;
+
 		it->second.reduceIOUfrom(debtor, cycle.llLCD);
 		//it->second.cancelOut(debtor, creditor, cycle.llLCD);
 
@@ -1012,7 +1031,19 @@ cycle bestChain(vector<cycle> possibleChains){
 	return bestChain;
 }
 
-IOU optimalCycle(string source, string target, long long amount){
+cycle reverseChain(cycle chain){
+	cycle sCycle;
+	sCycle.llLCD = chain.llLCD;
+	for(int i = chain.vstrCycle.size()-1; i >= 0; i--){
+		sCycle.vstrCycle.push_back(chain.vstrCycle.at(i));
+	}
+
+
+	return sCycle;
+}
+
+
+void optimalCycle(string source, string target, long long amount){
 	IOU iou = IOU(string(""), string(""), 0);
 
 	vector<cycle> vsPossibleDebtorChains = possibleDebtorChains(source);
@@ -1036,7 +1067,7 @@ IOU optimalCycle(string source, string target, long long amount){
 			}
 
 
-
+			//for(int k = 0; k < sTempCycle.vstrCycle.size()-1; k++){
 			for(int k = sTempCycle.vstrCycle.size()-1; k >= 0; k--){
 				sTempChain.vstrCycle.push_back(sTempCycle.vstrCycle.at(k));
 			}
@@ -1045,53 +1076,45 @@ IOU optimalCycle(string source, string target, long long amount){
 	}
 
 
-	cycle sOptimalChain = bestChain(vsPossibleChains);
-
-	if(sOptimalChain.llLCD != -1 && sOptimalChain.llLCD >= sOptimalChain.vstrCycle.size() && sOptimalChain.vstrCycle.size() >= 6){
-		cout << "Optimal chain: " ;
-		for(unsigned int i = 0; i < sOptimalChain.vstrCycle.size(); i++){
-			cout << sOptimalChain.vstrCycle.at(i) << ", " ;
-		}
-		cout << endl << "LCD: " << sOptimalChain.llLCD << "\tTotal value: " << sOptimalChain.llLCD * sOptimalChain.vstrCycle.size() << endl;
-		cout << endl ;
-
-		iou.m_strTargetID = sOptimalChain.vstrCycle.at(0);
-		iou.m_strSourceID = sOptimalChain.vstrCycle.at(sOptimalChain.vstrCycle.size()-1);
-		iou.setAmount(sOptimalChain.llLCD);
+	cycle sOptimalChain = reverseChain(bestChain(vsPossibleChains));
 
 
-		newTransaction(iou, false);
-		cancelOutCycle(sOptimalChain);
-
-		long long llCanceledOut = sOptimalChain.llLCD;
-		llTotalAmountCancelledOut += sOptimalChain.llLCD * sOptimalChain.vstrCycle.size();
-		cout << "\t\t" << llCanceledOut << " has been cancelled out." << endl;
-
-
-
-		for(unsigned int i = 0; i < sOptimalChain.vstrCycle.size()-1; i++){
-			string strSource = sOptimalChain.vstrCycle.at(i);
-			string strTarget = sOptimalChain.vstrCycle.at(sOptimalChain.vstrCycle.size()-1);
-			long long amount = sOptimalChain.llLCD / (sOptimalChain.vstrCycle.size()-1);
-
-			if((amount * 0.01) < 1){
-				amount += 1;
+		if(sOptimalChain.llLCD != -1 && sOptimalChain.llLCD >= sOptimalChain.vstrCycle.size() && sOptimalChain.vstrCycle.size() >= 6){
+			cout << "Optimal chain: " ;
+			for(unsigned int i = 0; i < sOptimalChain.vstrCycle.size(); i++){
+				cout << sOptimalChain.vstrCycle.at(i) << ", " ;
 			}
-			else{
-				amount += (amount * 0.01);
+			cout << endl << "LCD: " << sOptimalChain.llLCD << "\tTotal value: " << sOptimalChain.llLCD * sOptimalChain.vstrCycle.size() << endl;
+			cout << endl ;
+
+			iou.m_strSourceID = sOptimalChain.vstrCycle.at(0);
+			iou.m_strTargetID = sOptimalChain.vstrCycle.at(sOptimalChain.vstrCycle.size()-1);
+			iou.setAmount(sOptimalChain.llLCD);
+
+
+			newTransaction(iou, false);
+			cancelOutCycle(sOptimalChain);
+
+			long long llCanceledOut = sOptimalChain.llLCD;
+			llTotalAmountCancelledOut += sOptimalChain.llLCD * sOptimalChain.vstrCycle.size();
+			cout << "\t\t" << llCanceledOut << " has been cancelled out." << endl;
+
+			newTransaction(IOU(iou.m_strTargetID, iou.m_strSourceID, iou.getAmount()), true);
+			long long llTotalPaid = 0;
+			for(unsigned int i = 1; i < sOptimalChain.vstrCycle.size()-1; i++){
+				string strSource = sOptimalChain.vstrCycle.at(i);
+				string strTarget = string("IOUnetwork");
+				long long amount = sOptimalChain.llLCD/100;
+				llTotalPaid += amount;
+				cout << strSource << " --> " << strTarget << " : " << amount << endl;
+				newTransaction(IOU(strSource, strTarget, amount), true);
 			}
-
-			cout << strSource << " --> " << strTarget << " : " << amount << endl;
-			newTransaction(IOU(strSource, strTarget, amount), true);
-
+			long long llShare = llTotalPaid/3;
+			newTransaction(IOU(string("IOUnetwork"), iou.m_strSourceID, llShare), true);
+			newTransaction(IOU(string("IOUnetwork"), iou.m_strTargetID, llShare), true);
 
 		}
-		newTransaction(IOU(iou.m_strSourceID, string("IOUnetwork"), 1), true);
-	}
 
-
-
-	return iou;
 }
 
 long long profit(cycle cycle){
