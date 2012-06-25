@@ -18,10 +18,16 @@
 #include <map>
 #include <list>
 #include <algorithm>
+#include <ctime>
+#include <time.h>
 
 using namespace std;
 
 string strHost = string("192.168.1.100");
+bool bEnableGraph = false;
+bool bEnableChains = true;
+bool bEnableCycles = true;
+
 
 struct cycle{
 	vector<string> vstrCycle;
@@ -135,7 +141,9 @@ public:
 		it = mapAccounts.find(m_ID);
 
 		if(it == mapAccounts.end()){
-			addNode(m_ID, label(), getBalance());
+			if(bEnableGraph){
+				addNode(m_ID, label(), getBalance());
+			}
 			mapAccounts.insert(pair<string, Account>(m_ID, *this));
 		}
 
@@ -272,19 +280,20 @@ public:
 		it->second.m_setIOUsReceived.insert(iou);
 		it->second.setBalance(it->second.getBalance() + iou.getAmount());
 
-		if(it->second.owedFrom(iou.m_strTargetID)<=0){
+		if(it->second.owedFrom(iou.m_strTargetID)<=0 && bEnableGraph){
 			deleteEdge(iou.m_strTargetID + "-" + iou.m_strSourceID);
 		}
 
-		changeNode(it->second.m_ID, it->second.label(), it->second.getBalance());
-
-		if(owedTo(iou.m_strTargetID)-owedFrom(iou.m_strTargetID)>0){
+		if(bEnableGraph){
+			changeNode(it->second.m_ID, it->second.label(), it->second.getBalance());
+		}
+		if(owedTo(iou.m_strTargetID)-owedFrom(iou.m_strTargetID)>0 && bEnableGraph){
 			addEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, owedTo(iou.m_strTargetID)-owedFrom(iou.m_strTargetID));
 			changeEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, owedTo(iou.m_strTargetID)-owedFrom(iou.m_strTargetID));
 		}
 
 
-		if(checkCycle){
+		if(checkCycle && bEnableCycles){
 			long long llCanceledOut = 0;
 			cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.getAmount());
 			while(sCycle.vstrCycle.size() >= 2 && llCanceledOut < iou.getAmount()){
@@ -305,11 +314,12 @@ public:
 		//cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 0, 5).size() << endl;
 
 			balance();
-			changeNode(m_ID, label(), getBalance());
-
+			if(bEnableGraph){
+				changeNode(m_ID, label(), getBalance());
+			}
 			float fRandom = ranf();
 
-			if(fRandom < 0.1 && iou.m_strSourceID != string("IOU") && checkCycle){
+			if(bEnableChains && fRandom < 0.1 && iou.m_strSourceID != string("IOU") && checkCycle){
 				optimalCycle(iou.m_strSourceID, iou.m_strTargetID, iou.m_llAmount-llCanceledOut);
 			}
 
@@ -335,11 +345,15 @@ public:
 					itAccount = mapAccounts.find(iou.m_strSourceID);
 					itAccount->second.reduceIOUto(iou.getID(), remainingAmount);
 					remainingAmount = 0;
-        			deleteEdge(iou.m_strSourceID + "-" + iou.m_strTargetID);
-        			m_setIOUsReceived.erase(it);
+					if(bEnableGraph){
+						deleteEdge(iou.m_strSourceID + "-" + iou.m_strTargetID);
+					}
+					m_setIOUsReceived.erase(it);
         			if(iou.getAmount() > 0){
         				m_setIOUsReceived.insert(iou);
-        				addEdge(iou.m_strSourceID + "-" + iou.m_strTargetID, iou.m_strSourceID, iou.m_strTargetID, owedFrom(iou.m_strSourceID));
+        				if(bEnableGraph){
+        					addEdge(iou.m_strSourceID + "-" + iou.m_strTargetID, iou.m_strSourceID, iou.m_strTargetID, owedFrom(iou.m_strSourceID));
+        				}
         				it = m_setIOUsReceived.begin();
         			}
 
@@ -351,7 +365,9 @@ public:
         		    itAccount->second.reduceIOUto(it->m_llIOUID, it->m_llAmount);
 
         			string strEdge = it->m_strSourceID + "-" + it->m_strTargetID;
-        			deleteEdge(strEdge);
+        			if(bEnableGraph){
+        				deleteEdge(strEdge);
+        			}
         			m_setIOUsReceived.erase(it);
         		}
         	}
@@ -565,7 +581,11 @@ int main() {
 			}
 		}
 
+
+		clock_t start, finish;
 		for(int i = 0; i < nIOU; i++){
+			start = clock();
+			long long llOldIOUID = llIOUID;
 			IOU iou = IOU(string(""), string(""), 0);
 			if(vstrData.at(0) == string("random")){
 				iou = randomIOU();
@@ -588,10 +608,15 @@ int main() {
 				newTransaction(iou, true);
 				output << iou.m_strSourceID << ";" << iou.getAmount() << ";" << iou.m_strTargetID << endl;
 
+				finish = clock();
+
+
 				analysis << i+1 << ";";
 				analysis << llTotalIOUamount << ";" ;
 				analysis << llTotalAmountCancelledOut << ";" ;
 				analysis << (float)llTotalAmountCancelledOut/llTotalIOUamount << ";" ;
+				analysis << llIOUID-llOldIOUID << ";";
+				analysis << (double) (finish - start)/CLOCKS_PER_SEC << ";" ;
 				analysis << endl;
 
 			}
