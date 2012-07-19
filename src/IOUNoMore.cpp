@@ -2,8 +2,14 @@
 // Name        : IOUNoMore.cpp
 // Author      : Wouter Glorieux
 // Version     :
-// Copyright   : This code is intended as a proof-of-concept for a website that uses a network of IOU's and tries to cancel out as much IOU's as possible.
-// Description : Hello World in C++, Ansi-style
+// Description : This code is intended as a proof-of-concept for a website
+//			     that uses a network of IOU's and tries to cancel out as much IOU's as possible.
+// Usage	   : Run the program, when it asks to enter a new IOU, supply 3 parameters: source amount target
+//			     alternatively, type "random X" where X is a integer to generate X random IOU's
+//			     Pressing enter without parameters will generate 1 random IOU.
+//               Random data uses a gaussian distributrion to simulate realistic data.
+// Output      : There are 2 options for output, the standard output is text output, for a more graphical
+//               output you can use a Gephi server.
 //============================================================================
 #include <stdio.h>
 #include <cstdlib> // for rand() and srand()
@@ -23,18 +29,47 @@
 
 using namespace std;
 
-string strHost = string("192.168.1.100");
-bool bEnableGraph = false;
-bool bEnableChains = true;
-bool bEnableCycles = true;
+class IOU;
+class Account;
+map<string, Account> mapAccounts; //map object that will hold all accounts
 
 
+//some parameters for visualizing the network with a Gephi server
+string strHost = string("192.168.1.100");	//ip-adres of the gephi server for visualizing the network
+bool bEnableGraph = true;					//set to true to enable visual representation of the network, set to false to increase processing speed
+bool bShowWell = true;						//setting this to false will not show the well in gephi to improve the visibility of the network.
+
+//some parameters for the behaviour of the network
+bool bEnableChains = false;		//search for possible chains, warning: could cause a cascade of new IOUs each generating more possible chains
+bool bEnableCycles = true;		//search for existing cycles and cancel them out
+
+//some parameters for statistical values of the network
+int nPopulation = 100;			//total number of possible accounts
+int nClusters = 1;				//number of clusters in the network
+int nStatisticGroups = 10; 		//number of groups for statistical purposes
+int nMembersPerGroup = (nPopulation / nClusters) / (nStatisticGroups*nStatisticGroups);
+
+//some parameters for gaussian distributions of random data
+double dDebtorFrequencySigma = 0.3;    	//sigma value used in gaussian distribution of the frequency some account is a debtor.
+double dDebtorFrequencyMedian = 0.5;   	//median value used in gaussian distribution of the frequency some account is a debtor.
+double dCreditorFrequencySigma = 0.3;	//sigma value used in gaussian distribution of the frequency some account is a creditor.
+double dCreditorFrequencyMedian = 0.5;	//median value used in gaussian distribution of the frequency some account is a creditor.
+
+double dAmountSigma = 0.1;   //sigma value used in gaussian distribution of the amount of an IOU.
+double dAmountMedian = 0.5;  //median value used in gaussian distribution of the amount of an IOU.
+
+
+int nExpirationLow =  1000;
+int nExpirationHigh = 2000;
+
+
+//the cycle struct will be used to hold all data needed to cancel out a cycle
 struct cycle{
 	vector<string> vstrCycle;
 	long long llLCD; 	//lowest common denominator
 };
 
-
+//declarations
 void addNode(string ID, string label, float size );
 void addEdge(string ID, string source, string target, float weight );
 void changeNode(string ID, string label, float size );
@@ -44,35 +79,35 @@ void deleteEdge(string ID);
 void StringExplode(std::string str, std::string separator, std::vector<std::string>* results);
 cycle StronglyConnected(string v, string w, long long amount);
 void cancelOutCycle(cycle cycle);
-
-
 bool validateNetwork();
 bool validateOwedFromTo(string a, string b);
+void checkForExpirations(int i);
+void newTransaction(IOU iou	, bool checkCycle);
+IOU randomIOU();
+vector<cycle> possibleDebtorChains(string source);
+void optimalCycle(string source, string target, long long amount);
+long long profit(cycle cycle);
 
 float ranf();
 float box_muller(float m, float s);
 
-double GaussianDistribution(double x, double mu, double sigma){
-	double value = 0.0;
-
-	value = 1/(sigma*sqrt(2*M_PI)) * exp(-1.0/2.0 * pow( ((x-mu)/sigma),2));
-
-	return value;
-}
-
-static unsigned long long llIOUID = 1 ;
+static unsigned long long llIOUID = 1;
 static long long llTotalIOUamount = 0;
 static long long llTotalAmountCancelledOut = 0;
 
+double GaussianDistribution(double x, double mu, double sigma){
+	double value = 0.0;
+	value = 1/(sigma*sqrt(2*M_PI)) * exp(-1.0/2.0 * pow( ((x-mu)/sigma),2));
+	return value;
+}
 
 class IOU{
-
-
 public:
 	long long m_llIOUID;
 	string m_strSourceID;
 	string m_strTargetID;
 	long long m_llAmount;
+	unsigned int m_nExpiration;
 
 	IOU(string sourceID, string targetID, float amount){
 		m_strSourceID = sourceID;
@@ -97,9 +132,25 @@ public:
 		m_llAmount = amount;
 	}
 
-	void display(){
-		cout << "  IOU " << m_llIOUID << ": "<< m_strSourceID << " owes " << getAmount() << " to " << m_strTargetID << endl;
+	bool isExpired(){
+		bool bExpired = false;
+
+		if((m_llIOUID + m_nExpiration) <= llIOUID){
+			cout << m_llIOUID + m_nExpiration << " " << llIOUID << endl;
+			bExpired = true;
+		}
+
+		return bExpired;
 	}
+
+	void display(){
+		cout << "  ID " << m_llIOUID << ": "<< m_strSourceID << " owes " << getAmount() << " to " << m_strTargetID;
+		//if(m_strSourceID != string("IOU")){
+			//cout <<  " expires in " << m_nExpiration << " transactions";
+		//}
+		cout << endl;
+	}
+
 	bool operator < (const IOU& refParam) const
 	{
 		if(this->m_strTargetID != refParam.m_strTargetID){
@@ -109,19 +160,8 @@ public:
 			return (this->m_llAmount < refParam.m_llAmount);
 		}
 	}
-
 };
 
-void newTransaction(IOU iou	, bool checkCycle);
-IOU randomIOU();
-
-vector<cycle> possibleDebtorChains(string source);
-void optimalCycle(string source, string target, long long amount);
-long long profit(cycle cycle);
-
-class Account;
-
-map<string, Account> mapAccounts;
 
 class Account{
 private:
@@ -130,10 +170,8 @@ public:
 	string m_ID;
 	multiset<IOU> m_setIOUsGiven;
 	multiset<IOU> m_setIOUsReceived;
-	//float m_fBalance;
 
 	Account(string ID){
-		//cout << "init called for " << ID << endl;
 		m_ID = ID;
 		setBalance(0);
 
@@ -146,8 +184,8 @@ public:
 			}
 			mapAccounts.insert(pair<string, Account>(m_ID, *this));
 		}
-
 	}
+
 	~Account(){}
 
 	long long balance(){
@@ -166,13 +204,6 @@ public:
 		}
 		llBalance = llCredit -llDebet;
 
-		/*if(llBalance < 0 && m_ID != string("IOU")){
-			cout << "account balance check failed!" << endl;
-			cout << "balance of " << m_ID << "= " << llBalance << endl;
-			cout << llCredit << " " << llDebet << endl;
- 			char ch;
-			//cin >> ch;
-		}*/
 		setBalance(llBalance);
 		return llBalance;
 	}
@@ -183,6 +214,17 @@ public:
 
 	void setBalance(long long balance){
 		m_llBalance = balance;
+	}
+
+	void RedeemIOUs(){
+		multiset<IOU>::const_iterator it;
+		for (it = m_setIOUsReceived.begin();  it != m_setIOUsReceived.end();  it++)
+		{
+			cout << endl << it->m_llIOUID << " from " << it->m_strSourceID << " is being redeemed." << endl;
+				IOU cIOU = IOU(m_ID, string("IOU"), it->m_llAmount);
+				cIOU.m_llIOUID = llIOUID++;
+				newTransaction(cIOU, true);
+		}
 
 	}
 
@@ -210,7 +252,7 @@ public:
 		for (it = m_setIOUsReceived.begin();  it != m_setIOUsReceived.end();  it++)
 		{
 
-			if(it->m_strSourceID != string("IOU") && it->m_strSourceID != strTmpSource && (owedFrom(it->m_strSourceID)-owedTo(it->m_strSourceID)) > 0){
+			if(it->m_strSourceID != strTmpSource && (owedFrom(it->m_strSourceID)-owedTo(it->m_strSourceID)) > 0){
         		//cout << "adding " << it->m_strSourceID << " to debtors" << endl;
         		vstrDebtors.push_back(it->m_strSourceID);
         		strTmpSource = it->m_strSourceID;
@@ -265,7 +307,6 @@ public:
 	}
 	void giveIOU(IOU iou, bool checkCycle = true){
 		m_setIOUsGiven.insert(iou);
-		//m_fBalance -= iou.getAmount();
 
 		map<string, Account>::iterator it;
 		it = mapAccounts.find(iou.m_strTargetID);
@@ -275,8 +316,7 @@ public:
 		}
 
 		it = mapAccounts.find(iou.m_strTargetID);
-
-		//cout << "account from map: " << it->second.m_ID << " " << it->second.m_fBalance << endl;
+		//cout << "inserting IOU with expiration " << iou.m_nExpiration << endl;
 		it->second.m_setIOUsReceived.insert(iou);
 		it->second.setBalance(it->second.getBalance() + iou.getAmount());
 
@@ -311,8 +351,6 @@ public:
 				sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.getAmount()-llCanceledOut);
 			}
 
-		//cout << m_ID << "is strongly connected: " << StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, 0, 5).size() << endl;
-
 			balance();
 			if(bEnableGraph){
 				changeNode(m_ID, label(), getBalance());
@@ -322,14 +360,8 @@ public:
 			if(bEnableChains && fRandom < 0.1 && iou.m_strSourceID != string("IOU") && checkCycle){
 				optimalCycle(iou.m_strSourceID, iou.m_strTargetID, iou.m_llAmount-llCanceledOut);
 			}
-
 		}
-		//cout << "total amount: " << llTotalIOUamount << endl;
-		//cout << "total cancelled out: " << llTotalAmountCancelledOut << endl;
-
 	}
-
-
 
 	void reduceIOUfrom(string source, long long amount){
 		multiset<IOU>::iterator it;
@@ -413,8 +445,6 @@ vector<double> vdProbabilitiesCumulative3;
 vector<double> vdProbabilities4;		//probabilities for random ammount per IOU
 vector<double> vdProbabilitiesCumulative4;
 
-
-
 double cumulativeProbability1 = 0.0;
 double cumulativeProbability2 = 0.0;
 double cumulativeProbability3 = 0.0;
@@ -422,7 +452,6 @@ double cumulativeProbability4 = 0.0;
 
 int nLow = 0;
 int nHigh = RAND_MAX;
-
 
 int main() {
 
@@ -434,20 +463,19 @@ int main() {
 	std::string strAnalysisFileName = "analysis.txt";
 	std::ofstream analysis(strAnalysisFileName.c_str());
 
-
-	//int nDebts = 100;    				//total number of debts
-	int nStatisticGroups = 10; 		//number of groups for statistical purposes
-
-
+	//make sure there is at least 1 member per statistical group
+	if(nMembersPerGroup < 1){
+		nMembersPerGroup = 1;
+	}
 
 	for(int i = 0; i < nStatisticGroups; i++){
-		double probability1 = GaussianDistribution((double) i/nStatisticGroups, 0.2, 0.3);
+		double probability1 = GaussianDistribution((double) i/nStatisticGroups, dDebtorFrequencyMedian, dDebtorFrequencySigma);
 		vdProbabilities1.push_back(probability1);
-		double probability2 = GaussianDistribution((double) i/nStatisticGroups, 0.5, 0.1);
+		double probability2 = GaussianDistribution((double) i/nStatisticGroups, dAmountMedian, dAmountSigma);
 		vdProbabilities2.push_back(probability2);
-		double probability3 = GaussianDistribution((double) i/nStatisticGroups, 0.2, 0.3);
+		double probability3 = GaussianDistribution((double) i/nStatisticGroups, dCreditorFrequencyMedian, dCreditorFrequencySigma);
 		vdProbabilities3.push_back(probability3);
-		double probability4 = GaussianDistribution((double) i/nStatisticGroups, 0.5, 0.1);
+		double probability4 = GaussianDistribution((double) i/nStatisticGroups, dAmountMedian, dAmountSigma);
 		vdProbabilities4.push_back(probability4);
 
 
@@ -480,8 +508,6 @@ int main() {
 		vstrData.clear();
 		StringExplode(input, " ", &vstrData);
 
-
-
 		int nIOU = 0; // number of random iou's to generate
 		if(vstrData.at(0) == string("random")){
 			if(vstrData.size() >= 2){
@@ -489,87 +515,15 @@ int main() {
 			}
 		}
 		else if(vstrData.at(0) == string("default")){
-/*
-		vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
-		vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
-		//vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
-		//vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
-		vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
-		vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
-		//vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
-		//vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
-		vIOUdefault.push_back(IOU(string("C"), string("A"), 1));
-		vIOUdefault.push_back(IOU(string("C"), string("A"), 1));
-
-
-		vIOUdefault.push_back(IOU(string("A"), string("B"), 7));
-		vIOUdefault.push_back(IOU(string("B"), string("C"), 6));
-		vIOUdefault.push_back(IOU(string("C"), string("D"), 5));
-		vIOUdefault.push_back(IOU(string("D"), string("E"), 4));
-		vIOUdefault.push_back(IOU(string("E"), string("C"), 3));
-		vIOUdefault.push_back(IOU(string("C"), string("F"), 2));
-		vIOUdefault.push_back(IOU(string("F"), string("A"), 1));
-
-*/
 
 			vIOUdefault.push_back(IOU(string("A"), string("B"), 100));
-			vIOUdefault.push_back(IOU(string("B"), string("C"), 100));
-			//vIOUdefault.push_back(IOU(string("C"), string("D"), 100));
+			vIOUdefault.push_back(IOU(string("B"), string("E"), 100));
+			vIOUdefault.push_back(IOU(string("C"), string("D"), 100));
 			vIOUdefault.push_back(IOU(string("D"), string("E"), 100));
 			vIOUdefault.push_back(IOU(string("E"), string("F"), 100));
-			vIOUdefault.push_back(IOU(string("C"), string("D"), 100));
+			vIOUdefault.push_back(IOU(string("E"), string("G"), 100));
 			//vIOUdefault.push_back(IOU(string("Amajor"), string("B"), 300));
 			//vIOUdefault.push_back(IOU(string("F"), string("G"), 200));
-			/*
-			vIOUdefault.push_back(IOU(string("D"), string("E"), 1));
-			vIOUdefault.push_back(IOU(string("E"), string("F"), 1));
-			vIOUdefault.push_back(IOU(string("F"), string("G"), 1));
-			vIOUdefault.push_back(IOU(string("G"), string("D"), 1));
-
-			vIOUdefault.push_back(IOU(string("A"), string("B"), 1));
-			vIOUdefault.push_back(IOU(string("B"), string("C"), 1));
-			vIOUdefault.push_back(IOU(string("A"), string("D"), 1));
-			vIOUdefault.push_back(IOU(string("D"), string("C"), 1));
-			vIOUdefault.push_back(IOU(string("C"), string("A"), 2));
-
-			vIOUdefault.push_back(IOU(string("A"), string("B"), 2.81853));
-			vIOUdefault.push_back(IOU(string("C"), string("D"), 6.10824));
-			vIOUdefault.push_back(IOU(string("E"), string("F"), 8.73577));
-			vIOUdefault.push_back(IOU(string("F"), string("G"), 5.57332));
-
-			vIOUdefault.push_back(IOU(string("2_6"), string("5_7"), 2.924));
-			vIOUdefault.push_back(IOU(string("5_7"), string("3_7"), 2.954));
-			vIOUdefault.push_back(IOU(string("2_6"), string("5_6"), 2.404));
-			vIOUdefault.push_back(IOU(string("5_6"), string("3_7"), 5.904));
-			vIOUdefault.push_back(IOU(string("2_6"), string("4_5"), 1.94));
-			vIOUdefault.push_back(IOU(string("4_5"), string("3_7"), 2.804));
-			vIOUdefault.push_back(IOU(string("2_6"), string("3_5"), 8.904));
-			vIOUdefault.push_back(IOU(string("3_5"), string("3_7"), 1.904));
-			vIOUdefault.push_back(IOU(string("2_6"), string("7_7"), 2.934));
-			vIOUdefault.push_back(IOU(string("7_7"), string("5_7"), 4.904));
-			vIOUdefault.push_back(IOU(string("5_7"), string("3_7"), 10.904));
-			vIOUdefault.push_back(IOU(string("2_6"), string("4_5"), 2.4));
-			vIOUdefault.push_back(IOU(string("4_5"), string("5_7"), 7.943));
-			vIOUdefault.push_back(IOU(string("5_7"), string("3_7"), 2.604));
-			vIOUdefault.push_back(IOU(string("2_6"), string("2_7"), 2.964));
-			vIOUdefault.push_back(IOU(string("2_7"), string("6_5"), 9.904));
-			vIOUdefault.push_back(IOU(string("6_5"), string("2_7"), 0.904));
-			vIOUdefault.push_back(IOU(string("2_7"), string("5_6"), 2.104));
-			vIOUdefault.push_back(IOU(string("5_6"), string("3_7"), 0.04));
-			vIOUdefault.push_back(IOU(string("2_6"), string("1_6"), 2.903));
-			vIOUdefault.push_back(IOU(string("1_6"), string("4_7"), 2.905));
-			vIOUdefault.push_back(IOU(string("4_7"), string("3_7"), 2.994));
-			vIOUdefault.push_back(IOU(string("2_6"), string("2_7"), 2.924));
-			vIOUdefault.push_back(IOU(string("2_7"), string("3_5"), 6.04));
-			vIOUdefault.push_back(IOU(string("3_5"), string("3_7"), 2.204));
-			vIOUdefault.push_back(IOU(string("2_6"), string("1_6"), 8.903));
-			vIOUdefault.push_back(IOU(string("1_6"), string("4_7"), 3.905));
-			vIOUdefault.push_back(IOU(string("4_7"), string("8_6"), 7.904));
-			vIOUdefault.push_back(IOU(string("8_6"), string("8_7"), 9.904));
-			vIOUdefault.push_back(IOU(string("8_7"), string("3_7"), 10.904));
-			vIOUdefault.push_back(IOU(string("2_6"), string("3_7"), 6.904));
-*/
-
 
 			nIOU = vIOUdefault.size();
 		}
@@ -605,27 +559,29 @@ int main() {
 			cout << endl << i+1 << ": ";
 
 			if(iou.getAmount() != 0){
+				iou.m_llIOUID = llIOUID++;
 				newTransaction(iou, true);
 				output << iou.m_strSourceID << ";" << iou.getAmount() << ";" << iou.m_strTargetID << endl;
 
 				finish = clock();
 
-
 				analysis << i+1 << ";";
 				analysis << llTotalIOUamount << ";" ;
 				analysis << llTotalAmountCancelledOut << ";" ;
-				analysis << (float)llTotalAmountCancelledOut/llTotalIOUamount << ";" ;
+				float fSaturation = (float)llTotalAmountCancelledOut/llTotalIOUamount ;
+				analysis << fSaturation << ";" ;
+				cout << "Saturation: " << fSaturation << endl;
 				analysis << llIOUID-llOldIOUID << ";";
 				analysis << (double) (finish - start)/CLOCKS_PER_SEC << ";" ;
 				analysis << endl;
+
+				checkForExpirations(llIOUID);
 
 			}
 			else{
 				i--;
 				continue;
 			}
-
-
 		}
 	}
 
@@ -664,13 +620,12 @@ void newTransaction(IOU iou, bool checkCycle){
 	if(iou.m_strSourceID != string("IOU")){
 		cout << "New transaction: " << endl;
 		llTotalIOUamount += iou.m_llAmount;
+		iou.m_nExpiration = (rand() % (nExpirationHigh - nExpirationLow + 1)) + nExpirationLow;
+	}
+	else{
+		iou.m_nExpiration = 0;
 	}
 
-	iou.setID(llIOUID++);
-
-	//float fRounded = floor(iou.m_fAmount * 100) / 100;
-	//iou.m_fAmount = fRounded;
-		iou.display();
 
 	map<string, Account>::iterator it;
 	it = mapAccounts.find(iou.m_strSourceID);
@@ -680,13 +635,33 @@ void newTransaction(IOU iou, bool checkCycle){
 	}
 	it = mapAccounts.find(iou.m_strSourceID);
 
-	if(it->second.balance() < iou.getAmount() && iou.m_strSourceID != string("IOU")){
-		newTransaction(IOU(string("IOU"), iou.m_strSourceID, iou.getAmount()-it->second.getBalance()), checkCycle);
+
+	cout << it->second.m_ID << " balance is " << it->second.getBalance() << endl;
+	if(it->second.getBalance() < iou.getAmount() && iou.m_strSourceID != string("IOU")){
+		IOU cIOU = IOU(string("IOU"), iou.m_strSourceID, iou.getAmount()-it->second.getBalance());
+		cIOU.m_llIOUID = -iou.m_llIOUID;
+		newTransaction(cIOU, checkCycle);
+
 	}
 
-	it->second.giveIOU(iou, checkCycle);
+	llIOUID = iou.m_llIOUID + 1;
 
-	validateNetwork();
+	iou.display();
+
+
+	if(it->second.balance() >= iou.getAmount() || iou.m_strSourceID == string("IOU")){
+		it->second.giveIOU(iou, checkCycle);
+	}
+	else if(it->second.balance() < iou.getAmount() && iou.m_strTargetID == string("IOU")){
+		newTransaction(IOU(string("IOU"), iou.m_strSourceID, iou.getAmount()-it->second.getBalance()), false);
+		it->second.giveIOU(iou, checkCycle);
+	}
+
+	//if(iou.m_strSourceID != string("IOU") && iou.m_strTargetID != string("IOU")){
+		validateNetwork();
+	//	checkForExpirations();
+	//}
+
 }
 
 IOU randomIOU(){
@@ -747,6 +722,22 @@ IOU randomIOU(){
 		}
 	}
 
+
+
+	int nCluster = rand() % nClusters + 1;
+	ssSource << "_" << nCluster ;
+	float fRandom = ranf();
+	if(fRandom >= 0.5){
+			nCluster = rand() % nClusters + 1;
+	}
+	ssTarget << "_" << nCluster ;
+
+	int nRandom = rand() % nMembersPerGroup + 1;
+	ssSource << "(" << nRandom << ")" ;
+	nRandom = rand() % nMembersPerGroup + 1;
+	ssTarget << "(" << nRandom << ")" ;
+
+
 	IOU iou = IOU(ssSource.str(), ssTarget.str(), llAmount);
 
 	return iou;
@@ -761,9 +752,11 @@ void addNode(string ID, string label, float size = 1 ){
 			size = 100;
 	}
 
-	ss << "curl 'http://" << strHost <<":8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"an\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}' -s -o 'curlOutput.txt'";
-	system(ss.str().c_str());
+	if(ID != string("IOU") || bShowWell == true){
+		ss << "curl 'http://" << strHost <<":8080/workspace0?operation=updateGraph' -d ";
+		ss << "'{\"an\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}' -s -o 'curlOutput.txt'";
+		system(ss.str().c_str());
+	}
 
 }
 
@@ -771,11 +764,11 @@ void addEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
 	weight = weight/100;
-
-	ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}' -s -o 'curlOutput.txt'";
-	system(ss.str().c_str());
-
+	if(ID != string("IOU") || bShowWell == true){
+		ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
+		ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}' -s -o 'curlOutput.txt'";
+		system(ss.str().c_str());
+	}
 }
 
 void changeNode(string ID, string label, float size = 1 ){
@@ -786,22 +779,22 @@ void changeNode(string ID, string label, float size = 1 ){
 	if(ID == string("IOU")){
 		size = 100;
 	}
-
-	ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"cn\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}' -s -o 'curlOutput.txt'";
-	system(ss.str().c_str());
-
+	if(ID != string("IOU") || bShowWell == true){
+		ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
+		ss << "'{\"cn\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}' -s -o 'curlOutput.txt'";
+		system(ss.str().c_str());
+	}
 }
 
 void changeEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
 	weight = weight/100;
-
-	ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
-	ss << "'{\"ce\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}' -s -o 'curlOutput.txt'";
-	system(ss.str().c_str());
-
+	if(ID != string("IOU") || bShowWell == true){
+		ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
+		ss << "'{\"ce\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}' -s -o 'curlOutput.txt'";
+		system(ss.str().c_str());
+	}
 }
 
 
@@ -1203,6 +1196,23 @@ bool validateOwedFromTo(string a, string b){
 	}
 
 	return bOk;
+}
+
+void checkForExpirations(int i){
+
+
+
+	for( map<string,Account>::iterator it=mapAccounts.begin(); it!=mapAccounts.end(); ++it)
+	{
+		float fRandom = ranf();
+
+		//cout << it->second.m_ID << " " << fRandom << endl;
+		if(fRandom < 0.001 && it->second.m_ID != string("IOU")) {
+			cout << "**** " <<  it->second.m_ID << " is redeeming all IOUs" << endl;
+			Account cAccount = (*it).second;
+			cAccount.RedeemIOUs();
+		}
+	}
 }
 
 void StringExplode(std::string str, std::string separator, std::vector<std::string>* results){
