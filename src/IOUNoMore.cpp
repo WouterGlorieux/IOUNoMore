@@ -37,25 +37,25 @@ map<string, Account> mapAccounts; //map object that will hold all accounts
 //some parameters for visualizing the network with a Gephi server
 string strHost = string("192.168.1.100");	//ip-adres of the gephi server for visualizing the network
 bool bEnableGraph = true;					//set to true to enable visual representation of the network, set to false to increase processing speed
-bool bShowWell = true;						//setting this to false will not show the well in gephi to improve the visibility of the network.
+bool bShowWell = false;						//setting this to false will not show the well in gephi to improve the visibility of the network.
 
 //some parameters for the behaviour of the network
 bool bEnableChains = false;		//search for possible chains, warning: could cause a cascade of new IOUs each generating more possible chains
 bool bEnableCycles = true;		//search for existing cycles and cancel them out
 
 //some parameters for statistical values of the network
-int nPopulation = 100;			//total number of possible accounts
+int nPopulation = 1000;			//total number of possible accounts
 int nClusters = 1;				//number of clusters in the network
-int nStatisticGroups = 10; 		//number of groups for statistical purposes
+int nStatisticGroups = 100; 		//number of groups for statistical purposes
 int nMembersPerGroup = (nPopulation / nClusters) / (nStatisticGroups*nStatisticGroups);
 
 //some parameters for gaussian distributions of random data
-double dDebtorFrequencySigma = 0.3;    	//sigma value used in gaussian distribution of the frequency some account is a debtor.
-double dDebtorFrequencyMedian = 0.5;   	//median value used in gaussian distribution of the frequency some account is a debtor.
-double dCreditorFrequencySigma = 0.3;	//sigma value used in gaussian distribution of the frequency some account is a creditor.
-double dCreditorFrequencyMedian = 0.5;	//median value used in gaussian distribution of the frequency some account is a creditor.
+double dDebtorFrequencySigma = 0.5;    	//sigma value used in gaussian distribution of the frequency some account is a debtor.
+double dDebtorFrequencyMedian = 0.0;   	//median value used in gaussian distribution of the frequency some account is a debtor.
+double dCreditorFrequencySigma = 0.5;	//sigma value used in gaussian distribution of the frequency some account is a creditor.
+double dCreditorFrequencyMedian = 0.0;	//median value used in gaussian distribution of the frequency some account is a creditor.
 
-double dAmountSigma = 0.1;   //sigma value used in gaussian distribution of the amount of an IOU.
+double dAmountSigma = 0.5;   //sigma value used in gaussian distribution of the amount of an IOU.
 double dAmountMedian = 0.5;  //median value used in gaussian distribution of the amount of an IOU.
 
 
@@ -95,12 +95,16 @@ static unsigned long long llIOUID = 1;
 static long long llTotalIOUamount = 0;
 static long long llTotalAmountCancelledOut = 0;
 
+
+//This function will calculate the value of x in a gaussian distribution, it is used to generate more realistic randon data
 double GaussianDistribution(double x, double mu, double sigma){
 	double value = 0.0;
 	value = 1/(sigma*sqrt(2*M_PI)) * exp(-1.0/2.0 * pow( ((x-mu)/sigma),2));
 	return value;
 }
 
+
+//the IOU class will hold all data regarding a specific IOU
 class IOU{
 public:
 	long long m_llIOUID;
@@ -132,6 +136,7 @@ public:
 		m_llAmount = amount;
 	}
 
+	//function to check if a IOU is expired.
 	bool isExpired(){
 		bool bExpired = false;
 
@@ -143,6 +148,7 @@ public:
 		return bExpired;
 	}
 
+	//display funtion to print information on the screen
 	void display(){
 		cout << "  ID " << m_llIOUID << ": "<< m_strSourceID << " owes " << getAmount() << " to " << m_strTargetID;
 		//if(m_strSourceID != string("IOU")){
@@ -151,6 +157,7 @@ public:
 		cout << endl;
 	}
 
+	//< operator , needed to sort a set of IOUs
 	bool operator < (const IOU& refParam) const
 	{
 		if(this->m_strTargetID != refParam.m_strTargetID){
@@ -162,7 +169,7 @@ public:
 	}
 };
 
-
+//the account class will hold all data for each account
 class Account{
 private:
 	long long m_llBalance;
@@ -188,6 +195,7 @@ public:
 
 	~Account(){}
 
+	//this function will calculate the balance by subtracting the total amount of IOUs given from the IOUs received
 	long long balance(){
 		long long llBalance=0;
 		long long llDebet=0;
@@ -216,6 +224,7 @@ public:
 		m_llBalance = balance;
 	}
 
+	//this function will cause all IOUs received to be redeemed at the well, this is means the same as changing IOUs into real money
 	void RedeemIOUs(){
 		multiset<IOU>::const_iterator it;
 		for (it = m_setIOUsReceived.begin();  it != m_setIOUsReceived.end();  it++)
@@ -228,6 +237,7 @@ public:
 
 	}
 
+	//this function will give a vector containing all accounts that have accepted a IOU from this account
 	vector<string> creditors(){
 		vector<string> vstrCreditors;
 		multiset<IOU>::iterator it;
@@ -244,6 +254,7 @@ public:
 		return vstrCreditors;
 	}
 
+	//this function will return a vector containing all accounts that have given an IOU to this account
 	vector<string> debtors(){
 		vector<string> vstrDebtors;
 		multiset<IOU>::iterator it;
@@ -261,6 +272,7 @@ public:
 		return vstrDebtors;
 	}
 
+	//returns the account with the highest amount of IOUs given to this account
 	string maxDebtor(){
 		multiset<IOU>::iterator it;
 		string strTmpSource = "";
@@ -279,6 +291,7 @@ public:
 		return maxDebtor;
 	}
 
+	//this function will calculate and return how much is owed to a specific account
 	long long owedTo(string target){
 		long long llTotal = 0.0;
 		multiset<IOU>::iterator it;
@@ -292,6 +305,8 @@ public:
 
 		return llTotal;
 	}
+
+	//this function will calculate and return how much is owed from a specific account
 	long long owedFrom(string source){
 			long long llTotal = 0.0;
 			multiset<IOU>::iterator it;
@@ -305,6 +320,9 @@ public:
 
 			return llTotal;
 	}
+
+	//this is the main function that will handle everything to give an IOU, the checkCyle parameter
+	//controls if there will be a search for cycles after the IOU is given.
 	void giveIOU(IOU iou, bool checkCycle = true){
 		m_setIOUsGiven.insert(iou);
 
@@ -320,19 +338,24 @@ public:
 		it->second.m_setIOUsReceived.insert(iou);
 		it->second.setBalance(it->second.getBalance() + iou.getAmount());
 
+		//make sure there is no edge in the graph already
 		if(it->second.owedFrom(iou.m_strTargetID)<=0 && bEnableGraph){
 			deleteEdge(iou.m_strTargetID + "-" + iou.m_strSourceID);
 		}
 
+		//update the node in the graph
 		if(bEnableGraph){
 			changeNode(it->second.m_ID, it->second.label(), it->second.getBalance());
 		}
+
+		//add a new edge and update it with the correct values
 		if(owedTo(iou.m_strTargetID)-owedFrom(iou.m_strTargetID)>0 && bEnableGraph){
 			addEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, owedTo(iou.m_strTargetID)-owedFrom(iou.m_strTargetID));
 			changeEdge(m_ID + "-" + iou.m_strTargetID, m_ID, iou.m_strTargetID, owedTo(iou.m_strTargetID)-owedFrom(iou.m_strTargetID));
 		}
 
 
+		//now check for existing cyles in the graph
 		if(checkCycle && bEnableCycles){
 			long long llCanceledOut = 0;
 			cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.getAmount());
@@ -355,14 +378,18 @@ public:
 			if(bEnableGraph){
 				changeNode(m_ID, label(), getBalance());
 			}
-			float fRandom = ranf();
 
+			//for some fraction of IOUs given, also check if there are chains that can be connected.
+			float fRandom = ranf();
 			if(bEnableChains && fRandom < 0.1 && iou.m_strSourceID != string("IOU") && checkCycle){
 				optimalCycle(iou.m_strSourceID, iou.m_strTargetID, iou.m_llAmount-llCanceledOut);
 			}
 		}
 	}
 
+	//this function will lower the amount of IOUs from a specific source
+	//this function will also call reduceIOUto, it is important that only the account that has
+	//received the IOU is the only one that can lower the amount.
 	void reduceIOUfrom(string source, long long amount){
 		multiset<IOU>::iterator it;
 		map<string, Account>::iterator itAccount;
@@ -407,6 +434,8 @@ public:
 		balance();
 	}
 
+	//this function is called by a creditor when that account lowers the amount of an IOU
+	//to make sure the balance of the network is OK
 	void reduceIOUto(long long IOUID, long long amount){
 		multiset<IOU>::iterator it;
 		for (it = m_setIOUsGiven.begin();  it != m_setIOUsGiven.end();  it++)
@@ -424,6 +453,7 @@ public:
 		balance();
 	}
 
+	//a label used for the nodes in the graph
 	string label(){
 		stringstream ss;
 		ss << m_ID << ":" << getBalance();
@@ -468,6 +498,8 @@ int main() {
 		nMembersPerGroup = 1;
 	}
 
+
+	//generate the probabilities that some account will give an IOU to another account based on gaussian distribution
 	for(int i = 0; i < nStatisticGroups; i++){
 		double probability1 = GaussianDistribution((double) i/nStatisticGroups, dDebtorFrequencyMedian, dDebtorFrequencySigma);
 		vdProbabilities1.push_back(probability1);
@@ -496,10 +528,12 @@ int main() {
 
 	vector<IOU> vIOUdefault;
 
+	//the program will loop until the exit command is given
 	while(vstrData.at(0) != string("exit")){
 		cout << "enter IOU: source amount target" << endl;
 		getline(cin, input);
 
+		//if no input is given , assume 1 random transaction is wanted.
 		if(input == ""){
 			//continue;
 			input = "random 1";
@@ -516,14 +550,14 @@ int main() {
 		}
 		else if(vstrData.at(0) == string("default")){
 
+			//this is a list of IOUs that will be issued in sequence if the user inputs: default
+
 			vIOUdefault.push_back(IOU(string("A"), string("B"), 100));
 			vIOUdefault.push_back(IOU(string("B"), string("E"), 100));
 			vIOUdefault.push_back(IOU(string("C"), string("D"), 100));
 			vIOUdefault.push_back(IOU(string("D"), string("E"), 100));
 			vIOUdefault.push_back(IOU(string("E"), string("F"), 100));
 			vIOUdefault.push_back(IOU(string("E"), string("G"), 100));
-			//vIOUdefault.push_back(IOU(string("Amajor"), string("B"), 300));
-			//vIOUdefault.push_back(IOU(string("F"), string("G"), 200));
 
 			nIOU = vIOUdefault.size();
 		}
@@ -551,6 +585,7 @@ int main() {
 				iou = IOU(vstrData.at(0), vstrData.at(2), atof(vstrData.at(1).c_str()));
 			}
 
+			//if source and target are the same, try again
 			if(iou.m_strSourceID == iou.m_strTargetID){
 				i--;
 				continue;
@@ -565,6 +600,7 @@ int main() {
 
 				finish = clock();
 
+				//write data to analysis file
 				analysis << i+1 << ";";
 				analysis << llTotalIOUamount << ";" ;
 				analysis << llTotalAmountCancelledOut << ";" ;
@@ -615,6 +651,9 @@ int main() {
 	return 0;
 }
 
+
+//this function is called each time a new IOU is issued
+//if the account that will give the IOU doesn't have enough balance , a IOU will be created from the well to this account for the amount needed.
 void newTransaction(IOU iou, bool checkCycle){
 
 	if(iou.m_strSourceID != string("IOU")){
@@ -657,13 +696,10 @@ void newTransaction(IOU iou, bool checkCycle){
 		it->second.giveIOU(iou, checkCycle);
 	}
 
-	//if(iou.m_strSourceID != string("IOU") && iou.m_strTargetID != string("IOU")){
-		validateNetwork();
-	//	checkForExpirations();
-	//}
-
+	validateNetwork();
 }
 
+//this function will generate a random IOU based on a gaussian distribution
 IOU randomIOU(){
 	stringstream ss;
 	stringstream ssSource;
@@ -743,6 +779,7 @@ IOU randomIOU(){
 	return iou;
 }
 
+//adds a node to the graph
 void addNode(string ID, string label, float size = 1 ){
 	stringstream ss;
 
@@ -760,6 +797,7 @@ void addNode(string ID, string label, float size = 1 ){
 
 }
 
+//adds an edge to the graph
 void addEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
@@ -771,6 +809,7 @@ void addEdge(string ID, string source, string target, float weight = 1 ){
 	}
 }
 
+//changes a node on the graph
 void changeNode(string ID, string label, float size = 1 ){
 	stringstream ss;
 
@@ -786,6 +825,7 @@ void changeNode(string ID, string label, float size = 1 ){
 	}
 }
 
+//changes an edge on the graph
 void changeEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
@@ -797,7 +837,7 @@ void changeEdge(string ID, string source, string target, float weight = 1 ){
 	}
 }
 
-
+//deletes a node on the graph
 void deleteNode(string ID){
 	stringstream ss;
 
@@ -805,6 +845,8 @@ void deleteNode(string ID){
 	ss << "'{\"dn\":{\"" << ID << "\":{}}}' -s -o 'curlOutput.txt'";
 	system(ss.str().c_str());
 }
+
+//deletes an edge on the graph
 void deleteEdge(string ID){
 	stringstream ss;
 
@@ -813,6 +855,8 @@ void deleteEdge(string ID){
 	system(ss.str().c_str());
 }
 
+//this function will check if 2 nodes in the graph are strongly connected, and if so will return a cycle containing those 2 nodes
+//a basic breath-first seach is used.
 cycle StronglyConnected(string v, string w, long long amount){
 	cycle sCycle;
 	sCycle.llLCD = amount;
@@ -874,6 +918,7 @@ cycle StronglyConnected(string v, string w, long long amount){
 	return sCycle;
 }
 
+//this function will be called when a cycle is found to cancel out as much as possible
 void cancelOutCycle(cycle cycle){
 	for(unsigned int i = 0; i < cycle.vstrCycle.size(); i++){
 
@@ -888,16 +933,12 @@ void cancelOutCycle(cycle cycle){
 			debtor = cycle.vstrCycle.at(i+1);
 		}
 
-		//cout << it->second.m_ID << " is now reducing " << debtor << "'s debt." << endl;
-
 		it->second.reduceIOUfrom(debtor, cycle.llLCD);
-		//it->second.cancelOut(debtor, creditor, cycle.llLCD);
 
 		it->second.balance();
 
 		//dont do validate owedFromTo if its a 2nd degree cycle
 		if(cycle.vstrCycle.size() > 2){
-			//validateOwedFromTo(it->second.m_ID, creditor);
 			validateOwedFromTo(debtor, it->second.m_ID);
 		}
 
@@ -906,6 +947,7 @@ void cancelOutCycle(cycle cycle){
 	validateNetwork();
 }
 
+//this function will return a vector containing all possible creditor chains that originate from a specific souce
 vector<cycle> possibleCreditorChains(string source){
 	vector<cycle> vsCreditorChains;
 
@@ -954,23 +996,11 @@ vector<cycle> possibleCreditorChains(string source){
 		sCycle.vstrCycle = vstrCycle;
 		vsCreditorChains.push_back(sCycle);
 	}
-/*
-	cout << "Possible creditor chains: " << endl;
-	for(unsigned int i = 0; i < vsCreditorChains.size(); i++){
-		cycle creditorChain = vsCreditorChains.at(i);
-		cout << creditorChain.llLCD << "\t-> " ;
-
-		for(unsigned int j = 0; j< creditorChain.vstrCycle.size(); j++){
-			cout << creditorChain.vstrCycle.at(j) << ", " ;
-		}
-		cout << endl;
-	}
-*/
 
 	return vsCreditorChains;
 }
 
-
+//this function will return all possible debtor chains originating from a specific source
 vector<cycle> possibleDebtorChains(string source){
 	vector<cycle> vsDebtorChains;
 
@@ -1020,21 +1050,11 @@ vector<cycle> possibleDebtorChains(string source){
 		vsDebtorChains.push_back(sCycle);
 	}
 
-/*	cout << "Possible debtor chains: " << endl;
-	for(unsigned int i = 0; i < vsDebtorChains.size(); i++){
-		cycle debtorChain = vsDebtorChains.at(i);
-		cout << debtorChain.llLCD << "\t-> " ;
-
-		for(unsigned int j = 0; j< debtorChain.vstrCycle.size(); j++){
-			cout << debtorChain.vstrCycle.at(j) << ", " ;
-		}
-		cout << endl;
-	}
-*/
-
 	return vsDebtorChains;
 }
 
+
+//this function will compare every possible chain and return the most optimal one
 cycle bestChain(vector<cycle> possibleChains){
 	cycle bestChain;
 	long long llValue = 0;
@@ -1049,6 +1069,7 @@ cycle bestChain(vector<cycle> possibleChains){
 	return bestChain;
 }
 
+//returns a cycle or chain in reverse
 cycle reverseChain(cycle chain){
 	cycle sCycle;
 	sCycle.llLCD = chain.llLCD;
@@ -1060,7 +1081,7 @@ cycle reverseChain(cycle chain){
 	return sCycle;
 }
 
-
+//this function will combine every possible combinations of all debtorchains with creditorchains to find the most optimal one
 void optimalCycle(string source, string target, long long amount){
 	IOU iou = IOU(string(""), string(""), 0);
 
@@ -1084,8 +1105,6 @@ void optimalCycle(string source, string target, long long amount){
 				sTempChain.llLCD = amount;
 			}
 
-
-			//for(int k = 0; k < sTempCycle.vstrCycle.size()-1; k++){
 			for(int k = sTempCycle.vstrCycle.size()-1; k >= 0; k--){
 				sTempChain.vstrCycle.push_back(sTempCycle.vstrCycle.at(k));
 			}
@@ -1135,14 +1154,7 @@ void optimalCycle(string source, string target, long long amount){
 
 }
 
-long long profit(cycle cycle){
-	long long llProfit;
-
-	llProfit = (cycle.vstrCycle.size()-1) * (cycle.llLCD/100);
-	//cout << llProfit << endl;
-	return llProfit;
-}
-
+//this function will check if the total amount of IOUs is equal to the absolute value of the balance of the well
 bool validateNetwork(){
 	bool bOk = false;
 
@@ -1168,13 +1180,12 @@ bool validateNetwork(){
 		cout << "Balance IOU: " << llNetworkBalance << endl;
 		cout << "Balance net: " << llTotalBalance << endl;
 		cout << "difference: " << abs(llNetworkBalance) - llTotalBalance << endl;
-		char ch;
-		//cin >> ch;
 	}
 
 	return bOk;
 }
 
+//this will check if the amount a owes b is the same as the amount b is owed from a.
 bool validateOwedFromTo(string a, string b){
 	bool bOk = false;
 
@@ -1184,15 +1195,11 @@ bool validateOwedFromTo(string a, string b){
 
 	if(itA->second.owedTo(b) == itB->second.owedFrom(a)){
 		bOk = true;
-		//cout << "\tcheck OK" << endl;
 	}
 	else{
 		cout << "check failed: owed from is not equal to owed to" << endl;
 		cout << a << " owes " << itA->second.owedTo(b) << " to " << b << endl;
 		cout << b << " owes " << itB->second.owedTo(a) << " from " << a << endl;
-		char ch;
-		//cin >> ch;
-
 	}
 
 	return bOk;
@@ -1200,14 +1207,12 @@ bool validateOwedFromTo(string a, string b){
 
 void checkForExpirations(int i){
 
-
-
 	for( map<string,Account>::iterator it=mapAccounts.begin(); it!=mapAccounts.end(); ++it)
 	{
 		float fRandom = ranf();
 
 		//cout << it->second.m_ID << " " << fRandom << endl;
-		if(fRandom < 0.001 && it->second.m_ID != string("IOU")) {
+		if(fRandom < 0.0001 && it->second.m_ID != string("IOU")) {
 			cout << "**** " <<  it->second.m_ID << " is redeeming all IOUs" << endl;
 			Account cAccount = (*it).second;
 			cAccount.RedeemIOUs();
@@ -1215,6 +1220,7 @@ void checkForExpirations(int i){
 	}
 }
 
+//a helpful function to split a string into multiple parts based on a separator
 void StringExplode(std::string str, std::string separator, std::vector<std::string>* results){
     std::size_t found;
     found = str.find_first_of(separator);
