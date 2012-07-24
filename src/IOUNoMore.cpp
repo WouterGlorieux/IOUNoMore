@@ -49,6 +49,11 @@ int nClusters = 1;				//number of clusters in the network
 int nStatisticGroups = 100; 		//number of groups for statistical purposes
 int nMembersPerGroup = (nPopulation / nClusters) / (nStatisticGroups*nStatisticGroups);
 
+//these values determine if the debtor or creditor in a random IOU are existing accounts or new accounts. value between 0 and 1
+float fExistingAccountDebtor = 0.9;
+float fExistingAccountCreditor = 0.9;
+
+
 //some parameters for gaussian distributions of random data
 double dDebtorFrequencySigma = 0.5;    	//sigma value used in gaussian distribution of the frequency some account is a debtor.
 double dDebtorFrequencyMedian = 0.0;   	//median value used in gaussian distribution of the frequency some account is a debtor.
@@ -86,7 +91,7 @@ void newTransaction(IOU iou	, bool checkCycle);
 IOU randomIOU();
 vector<cycle> possibleDebtorChains(string source);
 void optimalCycle(string source, string target, long long amount);
-long long profit(cycle cycle);
+
 
 float ranf();
 float box_muller(float m, float s);
@@ -94,7 +99,9 @@ float box_muller(float m, float s);
 static unsigned long long llIOUID = 1;
 static long long llTotalIOUamount = 0;
 static long long llTotalAmountCancelledOut = 0;
+static long long llAccountNumber = 1;
 
+const string THEWELL = string("IOU");
 
 //This function will calculate the value of x in a gaussian distribution, it is used to generate more realistic randon data
 double GaussianDistribution(double x, double mu, double sigma){
@@ -151,7 +158,7 @@ public:
 	//display funtion to print information on the screen
 	void display(){
 		cout << "  ID " << m_llIOUID << ": "<< m_strSourceID << " owes " << getAmount() << " to " << m_strTargetID;
-		//if(m_strSourceID != string("IOU")){
+		//if(m_strSourceID != THEWELL){
 			//cout <<  " expires in " << m_nExpiration << " transactions";
 		//}
 		cout << endl;
@@ -230,7 +237,7 @@ public:
 		for (it = m_setIOUsReceived.begin();  it != m_setIOUsReceived.end();  it++)
 		{
 			cout << endl << it->m_llIOUID << " from " << it->m_strSourceID << " is being redeemed." << endl;
-				IOU cIOU = IOU(m_ID, string("IOU"), it->m_llAmount);
+				IOU cIOU = IOU(m_ID, THEWELL, it->m_llAmount);
 				cIOU.m_llIOUID = llIOUID++;
 				newTransaction(cIOU, true);
 		}
@@ -381,7 +388,7 @@ public:
 
 			//for some fraction of IOUs given, also check if there are chains that can be connected.
 			float fRandom = ranf();
-			if(bEnableChains && fRandom < 0.1 && iou.m_strSourceID != string("IOU") && checkCycle){
+			if(bEnableChains && fRandom < 0.1 && iou.m_strSourceID != THEWELL && checkCycle){
 				optimalCycle(iou.m_strSourceID, iou.m_strTargetID, iou.m_llAmount-llCanceledOut);
 			}
 		}
@@ -639,14 +646,14 @@ int main() {
 			cout << "\tIOU: " << cIOU.getID() << " received from " << cIOU.m_strSourceID << ": " << cIOU.getAmount() << endl;
 		}
 
-		if(cAccount.m_ID != string("IOU")){
+		if(cAccount.m_ID != THEWELL){
 			totalBalance += cAccount.getBalance();
 		}
 	}
 
 
 	cout << endl << "Total of all balances: " << totalBalance << endl;
-	map<string,Account>::iterator it=mapAccounts.find(string("IOU"));
+	map<string,Account>::iterator it=mapAccounts.find(THEWELL);
 	cout << "Balance of IOU: " << it->second.getBalance() << endl;
 	return 0;
 }
@@ -656,7 +663,7 @@ int main() {
 //if the account that will give the IOU doesn't have enough balance , a IOU will be created from the well to this account for the amount needed.
 void newTransaction(IOU iou, bool checkCycle){
 
-	if(iou.m_strSourceID != string("IOU")){
+	if(iou.m_strSourceID != THEWELL){
 		cout << "New transaction: " << endl;
 		llTotalIOUamount += iou.m_llAmount;
 		iou.m_nExpiration = (rand() % (nExpirationHigh - nExpirationLow + 1)) + nExpirationLow;
@@ -676,8 +683,8 @@ void newTransaction(IOU iou, bool checkCycle){
 
 
 	cout << it->second.m_ID << " balance is " << it->second.getBalance() << endl;
-	if(it->second.getBalance() < iou.getAmount() && iou.m_strSourceID != string("IOU")){
-		IOU cIOU = IOU(string("IOU"), iou.m_strSourceID, iou.getAmount()-it->second.getBalance());
+	if(it->second.getBalance() < iou.getAmount() && iou.m_strSourceID != THEWELL){
+		IOU cIOU = IOU(THEWELL, iou.m_strSourceID, iou.getAmount()-it->second.getBalance());
 		cIOU.m_llIOUID = -iou.m_llIOUID;
 		newTransaction(cIOU, checkCycle);
 
@@ -688,16 +695,34 @@ void newTransaction(IOU iou, bool checkCycle){
 	iou.display();
 
 
-	if(it->second.balance() >= iou.getAmount() || iou.m_strSourceID == string("IOU")){
+	if(it->second.balance() >= iou.getAmount() || iou.m_strSourceID == THEWELL){
 		it->second.giveIOU(iou, checkCycle);
 	}
-	else if(it->second.balance() < iou.getAmount() && iou.m_strTargetID == string("IOU")){
-		newTransaction(IOU(string("IOU"), iou.m_strSourceID, iou.getAmount()-it->second.getBalance()), false);
+	else if(it->second.balance() < iou.getAmount() && iou.m_strTargetID == THEWELL){
+		newTransaction(IOU(THEWELL, iou.m_strSourceID, iou.getAmount()-it->second.getBalance()), false);
 		it->second.giveIOU(iou, checkCycle);
 	}
 
 	validateNetwork();
 }
+
+
+//this function returns a vector of strings with all accounts.
+//optionally the parameter positiveBalanceOnly can be used to filter only accounts that have a positive balance.
+vector<string> Accounts(bool positiveBalanceOnly = false){
+	vector<string> vstrAccounts;
+	for( map<string,Account>::iterator it=mapAccounts.begin(); it!=mapAccounts.end(); ++it)
+	{
+		Account cAccount = (*it).second;
+		if(cAccount.m_ID != THEWELL){
+			if(cAccount.getBalance() > 0 || !positiveBalanceOnly){
+				vstrAccounts.push_back(cAccount.m_ID);
+			}
+		}
+	}
+	return vstrAccounts;
+}
+
 
 //this function will generate a random IOU based on a gaussian distribution
 IOU randomIOU(){
@@ -773,8 +798,39 @@ IOU randomIOU(){
 	nRandom = rand() % nMembersPerGroup + 1;
 	ssTarget << "(" << nRandom << ")" ;
 
+//----------------------
+
+	ssSource.str("");
+	ssTarget.str("");
+
+	vector<string> vstrAccounts = Accounts(true);
+	if(vstrAccounts.size() != 0){
+		nRandom = rand() % vstrAccounts.size();
+	}
+
+	fRandom = ranf();
+	if(fRandom >= fExistingAccountDebtor || vstrAccounts.size() == 0){
+		ssSource << "Account" << llAccountNumber++;
+	}
+	else{
+		ssSource << vstrAccounts.at(nRandom);
+	}
+
+	vstrAccounts = Accounts(false);
+		if(vstrAccounts.size() != 0){
+			nRandom = rand() % vstrAccounts.size();
+		}
+
+	fRandom = ranf();
+	if(fRandom >= fExistingAccountCreditor || vstrAccounts.size() == 0){
+		ssTarget << "Account" << llAccountNumber++;
+	}
+	else{
+		ssTarget << vstrAccounts.at(nRandom);
+	}
 
 	IOU iou = IOU(ssSource.str(), ssTarget.str(), llAmount);
+//	iou.display();
 
 	return iou;
 }
@@ -785,11 +841,11 @@ void addNode(string ID, string label, float size = 1 ){
 
 	size = size/100;
 
-	if(ID == string("IOU")){
+	if(ID == THEWELL){
 			size = 100;
 	}
 
-	if(ID != string("IOU") || bShowWell == true){
+	if(ID != THEWELL || bShowWell == true){
 		ss << "curl 'http://" << strHost <<":8080/workspace0?operation=updateGraph' -d ";
 		ss << "'{\"an\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}' -s -o 'curlOutput.txt'";
 		system(ss.str().c_str());
@@ -802,7 +858,7 @@ void addEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
 	weight = weight/100;
-	if(ID != string("IOU") || bShowWell == true){
+	if(ID != THEWELL || bShowWell == true){
 		ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
 		ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}' -s -o 'curlOutput.txt'";
 		system(ss.str().c_str());
@@ -815,10 +871,10 @@ void changeNode(string ID, string label, float size = 1 ){
 
 	size = size/100;
 
-	if(ID == string("IOU")){
+	if(ID == THEWELL){
 		size = 100;
 	}
-	if(ID != string("IOU") || bShowWell == true){
+	if(ID != THEWELL || bShowWell == true){
 		ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
 		ss << "'{\"cn\":{\"" << ID << "\":{\"label\":\"" << label << "\",\"size\":" << size << "}}}' -s -o 'curlOutput.txt'";
 		system(ss.str().c_str());
@@ -830,7 +886,7 @@ void changeEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
 
 	weight = weight/100;
-	if(ID != string("IOU") || bShowWell == true){
+	if(ID != THEWELL || bShowWell == true){
 		ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
 		ss << "'{\"ce\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}' -s -o 'curlOutput.txt'";
 		system(ss.str().c_str());
@@ -1163,12 +1219,12 @@ bool validateNetwork(){
 	{
 		Account cAccount = (*it).second;
 		cAccount.balance();
-		if(cAccount.m_ID != string("IOU")){
+		if(cAccount.m_ID != THEWELL){
 			llTotalBalance += cAccount.getBalance();
 		}
 	}
 
-	map<string,Account>::iterator it = mapAccounts.find(string("IOU"));
+	map<string,Account>::iterator it = mapAccounts.find(THEWELL);
 
 	long long llNetworkBalance = it->second.getBalance();
 	if(abs(llNetworkBalance) == llTotalBalance ){
@@ -1212,7 +1268,7 @@ void checkForExpirations(int i){
 		float fRandom = ranf();
 
 		//cout << it->second.m_ID << " " << fRandom << endl;
-		if(fRandom < 0.0001 && it->second.m_ID != string("IOU")) {
+		if(fRandom < 0.0001 && it->second.m_ID != THEWELL) {
 			cout << "**** " <<  it->second.m_ID << " is redeeming all IOUs" << endl;
 			Account cAccount = (*it).second;
 			cAccount.RedeemIOUs();
