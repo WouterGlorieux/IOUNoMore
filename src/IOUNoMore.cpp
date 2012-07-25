@@ -36,7 +36,7 @@ map<string, Account> mapAccounts; //map object that will hold all accounts
 
 //some parameters for visualizing the network with a Gephi server
 string strHost = string("192.168.1.100");	//ip-adres of the gephi server for visualizing the network
-bool bEnableGraph = true;					//set to true to enable visual representation of the network, set to false to increase processing speed
+bool bEnableGraph = false;					//set to true to enable visual representation of the network, set to false to increase processing speed
 bool bShowWell = false;						//setting this to false will not show the well in gephi to improve the visibility of the network.
 
 //some parameters for the behaviour of the network
@@ -44,10 +44,7 @@ bool bEnableChains = false;		//search for possible chains, warning: could cause 
 bool bEnableCycles = true;		//search for existing cycles and cancel them out
 
 //some parameters for statistical values of the network
-int nPopulation = 10;			//total number of possible accounts
-int nClusters = 1;				//number of clusters in the network
-int nStatisticGroups = 100; 		//number of groups for statistical purposes
-int nMembersPerGroup = (nPopulation / nClusters) / (nStatisticGroups*nStatisticGroups);
+int nPopulation = 1000;			//total number of possible accounts
 
 //these values determine if the debtor or creditor in a random IOU are existing accounts or new accounts. value between 0 and 1
 float fExistingAccountDebtor = 0.9;
@@ -92,6 +89,8 @@ void checkForExpirations(int i);
 void newTransaction(IOU iou	, bool checkCycle);
 IOU randomIOU();
 vector<cycle> possibleDebtorChains(string source);
+vector<string> searchResult(vector<cycle> possibleChains);
+
 void optimalCycle(string source, string target, long long amount);
 
 
@@ -102,6 +101,8 @@ static unsigned long long llIOUID = 1;
 static long long llTotalIOUamount = 0;
 static long long llTotalAmountCancelledOut = 0;
 static long long llAccountNumber = 1;
+
+long long llMaxBalance = 0;
 
 const string THEWELL = string("IOU");
 
@@ -465,7 +466,7 @@ public:
 	//a label used for the nodes in the graph
 	string label(){
 		stringstream ss;
-		ss << m_ID << ":" << getBalance();
+		ss << m_ID << ": " << getBalance()/100;
 		return ss.str();
 	}
 };
@@ -502,6 +503,7 @@ int main() {
 	std::string strAnalysisFileName = "analysis.txt";
 	std::ofstream analysis(strAnalysisFileName.c_str());
 
+	/*
 	//make sure there is at least 1 member per statistical group
 	if(nMembersPerGroup < 1){
 		nMembersPerGroup = 1;
@@ -530,7 +532,7 @@ int main() {
 		cumulativeProbability4 += probability4;
 
 	}
-
+*/
 	string input;
 	vector<string> vstrData;
 	vstrData.push_back(string("initial value"));
@@ -569,6 +571,14 @@ int main() {
 			vIOUdefault.push_back(IOU(string("E"), string("G"), 100));
 
 			nIOU = vIOUdefault.size();
+		}
+		else if(vstrData.at(0) == string("list")){
+			string strAccount = vstrData.at(1).c_str();
+			vector<cycle> vsChains = possibleDebtorChains(strAccount);
+			searchResult(vsChains);
+			continue;
+
+
 		}
 		else if(vstrData.size() == 3){
 			nIOU = 1;
@@ -849,7 +859,8 @@ IOU randomIOU(){
 void addNode(string ID, string label, float size = 1 ){
 	stringstream ss;
 
-	size = size/100;
+	size = (size/llMaxBalance) * 100;
+	//cout << "size:" << size << endl;
 
 	if(ID == THEWELL){
 			size = 100;
@@ -866,8 +877,8 @@ void addNode(string ID, string label, float size = 1 ){
 //adds an edge to the graph
 void addEdge(string ID, string source, string target, float weight = 1 ){
 	stringstream ss;
-
 	weight = weight/100;
+
 	if(ID != THEWELL || bShowWell == true){
 		ss << "curl 'http://" << strHost << ":8080/workspace0?operation=updateGraph' -d ";
 		ss << "'{\"ae\":{\"" << ID << "\":{\"source\":\"" << source << "\",\"target\":\"" << target << "\",\"directed\":true,\"weight\":" << weight << ",\"label\":\"" << weight << "\"}}}' -s -o 'curlOutput.txt'";
@@ -879,7 +890,8 @@ void addEdge(string ID, string source, string target, float weight = 1 ){
 void changeNode(string ID, string label, float size = 1 ){
 	stringstream ss;
 
-	size = size/100;
+	size = (size/llMaxBalance) * 100;
+//	cout << "size:" << size << endl;
 
 	if(ID == THEWELL){
 		size = 100;
@@ -1135,6 +1147,21 @@ cycle bestChain(vector<cycle> possibleChains){
 	return bestChain;
 }
 
+vector<string> searchResult(vector<cycle> possibleChains){
+	vector<string> vstrResult;
+	long long llValue = 0;
+
+
+	for(unsigned int i = 0; i < possibleChains.size(); i++){
+		string strAccount = possibleChains.at(i).vstrCycle.at(0);
+		vstrResult.push_back(strAccount);
+		cout << strAccount << ": " << possibleChains.at(i).llLCD << endl;
+
+	}
+
+	return vstrResult;
+}
+
 //returns a cycle or chain in reverse
 cycle reverseChain(cycle chain){
 	cycle sCycle;
@@ -1223,6 +1250,7 @@ void optimalCycle(string source, string target, long long amount){
 //this function will check if the total amount of IOUs is equal to the absolute value of the balance of the well
 bool validateNetwork(){
 	bool bOk = false;
+	llMaxBalance = 0;
 
 	long long llTotalBalance = 0;
 	for( map<string,Account>::iterator it=mapAccounts.begin(); it!=mapAccounts.end(); ++it)
@@ -1231,8 +1259,12 @@ bool validateNetwork(){
 		cAccount.balance();
 		if(cAccount.m_ID != THEWELL){
 			llTotalBalance += cAccount.getBalance();
+			if(llMaxBalance < cAccount.getBalance()){
+				llMaxBalance = cAccount.getBalance();
+			}
 		}
 	}
+	//cout << "max balance is " << llMaxBalance << endl;
 
 	map<string,Account>::iterator it = mapAccounts.find(THEWELL);
 
