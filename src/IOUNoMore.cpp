@@ -44,7 +44,7 @@ bool bEnableChains = false;		//search for possible chains, warning: could cause 
 bool bEnableCycles = true;		//search for existing cycles and cancel them out
 
 //some parameters for statistical values of the network
-int nPopulation = 1000;			//total number of possible accounts
+int nPopulation = 10;			//total number of possible accounts
 int nClusters = 1;				//number of clusters in the network
 int nStatisticGroups = 100; 		//number of groups for statistical purposes
 int nMembersPerGroup = (nPopulation / nClusters) / (nStatisticGroups*nStatisticGroups);
@@ -53,6 +53,8 @@ int nMembersPerGroup = (nPopulation / nClusters) / (nStatisticGroups*nStatisticG
 float fExistingAccountDebtor = 0.9;
 float fExistingAccountCreditor = 0.9;
 
+
+float fCloseAcccountProbability = 0.0001; //after each transaction , each account has a small probability to close the account
 
 //some parameters for gaussian distributions of random data
 double dDebtorFrequencySigma = 0.5;    	//sigma value used in gaussian distribution of the frequency some account is a debtor.
@@ -232,7 +234,7 @@ public:
 	}
 
 	//this function will cause all IOUs received to be redeemed at the well, this is means the same as changing IOUs into real money
-	void RedeemIOUs(){
+	void CloseAccount(){
 		multiset<IOU>::const_iterator it;
 		for (it = m_setIOUsReceived.begin();  it != m_setIOUsReceived.end();  it++)
 		{
@@ -724,7 +726,7 @@ vector<string> Accounts(bool positiveBalanceOnly = false){
 }
 
 
-//this function will generate a random IOU based on a gaussian distribution
+//this function will generate a random IOU
 IOU randomIOU(){
 	stringstream ss;
 	stringstream ssSource;
@@ -732,7 +734,7 @@ IOU randomIOU(){
 	stringstream ssTarget;
 
 	long long llAmount = 0;
-
+/*
 	dRandom1 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability1 ;
 	for(unsigned int i = 0; i < vdProbabilitiesCumulative1.size()-1; i++){
 		if(vdProbabilitiesCumulative1.at(i) <= dRandom1 && vdProbabilitiesCumulative1.at(i+1) >+ dRandom1 ){
@@ -799,20 +801,28 @@ IOU randomIOU(){
 	ssTarget << "(" << nRandom << ")" ;
 
 //----------------------
-
+*/
 	ssSource.str("");
 	ssTarget.str("");
+
+	int nRandom = 0;
 
 	vector<string> vstrAccounts = Accounts(true);
 	if(vstrAccounts.size() != 0){
 		nRandom = rand() % vstrAccounts.size();
 	}
 
-	fRandom = ranf();
-	if(fRandom >= fExistingAccountDebtor || vstrAccounts.size() == 0){
+	float fRandom = ranf();
+	if((fRandom >= fExistingAccountDebtor || vstrAccounts.size() == 0) && llAccountNumber < nPopulation+1){
 		ssSource << "Account" << llAccountNumber++;
+		llAmount = (rand() % 10000) * 100;
+
 	}
 	else{
+		map<string, Account>::iterator it;
+		it = mapAccounts.find(vstrAccounts.at(nRandom));
+		llAmount = rand() % it->second.getBalance();
+
 		ssSource << vstrAccounts.at(nRandom);
 	}
 
@@ -822,7 +832,7 @@ IOU randomIOU(){
 		}
 
 	fRandom = ranf();
-	if(fRandom >= fExistingAccountCreditor || vstrAccounts.size() == 0){
+	if((fRandom >= fExistingAccountCreditor || vstrAccounts.size() == 0) && llAccountNumber < nPopulation+1){
 		ssTarget << "Account" << llAccountNumber++;
 	}
 	else{
@@ -1268,10 +1278,10 @@ void checkForExpirations(int i){
 		float fRandom = ranf();
 
 		//cout << it->second.m_ID << " " << fRandom << endl;
-		if(fRandom < 0.0001 && it->second.m_ID != THEWELL) {
+		if(fRandom < fCloseAcccountProbability && it->second.m_ID != THEWELL) {
 			cout << "**** " <<  it->second.m_ID << " is redeeming all IOUs" << endl;
 			Account cAccount = (*it).second;
-			cAccount.RedeemIOUs();
+			cAccount.CloseAccount();
 		}
 	}
 }
