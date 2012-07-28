@@ -574,10 +574,7 @@ int main() {
 				SearchResult sResult = *it;
 				cout << ++nCounter << ": " << sResult.getAccount() << ":\t\t " << sResult.getValue() << endl;
 			}
-
 			continue;
-
-
 		}
 		else if(vstrData.size() == 3){
 			nIOU = 1;
