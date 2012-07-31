@@ -42,8 +42,8 @@ bool bEnableGraph = false;					//set to true to enable visual representation of 
 bool bShowWell = false;						//setting this to false will not show the well in gephi to improve the visibility of the network.
 
 //some parameters for the behaviour of the network
-bool bEnableChains = false;		//search for possible chains, warning: could cause a cascade of new IOUs each generating more possible chains
 bool bEnableCycles = true;		//search for existing cycles and cancel them out
+bool bEnableChains = false;		//search for possible chains, warning: could cause a cascade of new IOUs each generating more possible chains
 
 //some parameters for statistical values of the network
 int nPopulation = 1000;			//total number of possible accounts
@@ -55,18 +55,12 @@ float fExistingAccountCreditor = 0.9;
 
 float fCloseAcccountProbability = 0.0001; //after each transaction , each account has a small probability to close the account
 
-//some parameters for gaussian distributions of random data
-double dDebtorFrequencySigma = 0.5;    	//sigma value used in gaussian distribution of the frequency some account is a debtor.
-double dDebtorFrequencyMedian = 0.0;   	//median value used in gaussian distribution of the frequency some account is a debtor.
-double dCreditorFrequencySigma = 0.5;	//sigma value used in gaussian distribution of the frequency some account is a creditor.
-double dCreditorFrequencyMedian = 0.0;	//median value used in gaussian distribution of the frequency some account is a creditor.
-
-double dAmountSigma = 0.5;   //sigma value used in gaussian distribution of the amount of an IOU.
-double dAmountMedian = 0.5;  //median value used in gaussian distribution of the amount of an IOU.
-
-
 int nExpirationLow =  1000;
 int nExpirationHigh = 2000;
+
+//some values for random number generation
+int nLow = 0;
+int nHigh = RAND_MAX;
 
 
 //the cycle struct will be used to hold all data needed to cancel out a cycle
@@ -75,6 +69,46 @@ struct cycle{
 	long long llValue; 	//lowest value
 };
 
+
+
+//declarations
+void addNode(string ID, string label, float size );
+void addEdge(string ID, string source, string target, float weight );
+void changeNode(string ID, string label, float size );
+void changeEdge(string ID, string source, string target, float weight );
+void deleteNode(string ID);
+void deleteEdge(string ID);
+void StringExplode(std::string str, std::string separator, std::vector<std::string>* results);
+cycle StronglyConnected(string v, string w, long long amount);
+void cancelOutCycle(cycle cycle);
+bool validateNetwork();
+bool validateOwedFromTo(string a, string b);
+void checkForWithdrawals();
+void newTransaction(IOU iou	, bool checkCycle);
+IOU randomIOU();
+vector<cycle> possibleDebtorChains(string source);
+set<SearchResult> searchResults(vector<cycle> possibleChains);
+
+void optimalCycle(string source, string target, long long amount);
+
+
+float ranf();
+float box_muller(float m, float s);
+
+static unsigned long long llIOUID = 1;
+static long long llTotalIOUamount = 0;
+static long long llTotalAmountCancelledOut = 0;
+static long long llAccountNumber = 1;
+
+long long llMaxBalance = 0;
+
+const string THEWELL = string("The well");
+
+/**
+ * Classes
+ */
+
+//this class will hold data for searchresults
 class SearchResult{
 public:
 	string m_strAccount;
@@ -109,47 +143,6 @@ public:
 		return (this->m_llValue > refParam.m_llValue);
 	}
 };
-
-//declarations
-void addNode(string ID, string label, float size );
-void addEdge(string ID, string source, string target, float weight );
-void changeNode(string ID, string label, float size );
-void changeEdge(string ID, string source, string target, float weight );
-void deleteNode(string ID);
-void deleteEdge(string ID);
-void StringExplode(std::string str, std::string separator, std::vector<std::string>* results);
-cycle StronglyConnected(string v, string w, long long amount);
-void cancelOutCycle(cycle cycle);
-bool validateNetwork();
-bool validateOwedFromTo(string a, string b);
-void checkForWithdrawals();
-void newTransaction(IOU iou	, bool checkCycle);
-IOU randomIOU();
-vector<cycle> possibleDebtorChains(string source);
-set<SearchResult> searchResults(vector<cycle> possibleChains);
-
-void optimalCycle(string source, string target, long long amount);
-
-
-float ranf();
-float box_muller(float m, float s);
-
-static unsigned long long llIOUID = 1;
-static long long llTotalIOUamount = 0;
-static long long llTotalAmountCancelledOut = 0;
-static long long llAccountNumber = 1;
-
-long long llMaxBalance = 0;
-
-const string THEWELL = string("IOU");
-
-//This function will calculate the value of x in a gaussian distribution, it is used to generate more realistic randon data
-double GaussianDistribution(double x, double mu, double sigma){
-	double value = 0.0;
-	value = 1/(sigma*sqrt(2*M_PI)) * exp(-1.0/2.0 * pow( ((x-mu)/sigma),2));
-	return value;
-}
-
 
 //the IOU class will hold all data regarding a specific IOU
 class IOU{
@@ -508,8 +501,11 @@ public:
 	}
 };
 
-int nLow = 0;
-int nHigh = RAND_MAX;
+
+/**
+ * main program
+ */
+
 
 int main() {
 
@@ -536,6 +532,8 @@ int main() {
 		cout << "to enter random IOU:\t\t random <X>" << endl;
 		cout << "to do a search on an account:\t search <account>" << endl;
 		cout << "to use a txt file for input:\t input <file.txt>" << endl;
+		cout << "to exit the program: \t\t exit" << endl;
+
 		getline(cin, input);
 
 		//if no input is given , try again.
@@ -672,7 +670,7 @@ int main() {
 
 	cout << endl << "Total of all balances: " << totalBalance << endl;
 	map<string,Account>::iterator it=mapAccounts.find(THEWELL);
-	cout << "Balance of IOU: " << it->second.getBalance() << endl;
+	cout << "Balance of the well: " << it->second.getBalance() << endl;
 	return 0;
 }
 
@@ -744,80 +742,11 @@ vector<string> Accounts(bool positiveBalanceOnly = false){
 
 //this function will generate a random IOU
 IOU randomIOU(){
-	stringstream ss;
 	stringstream ssSource;
 	stringstream ssAmount;
 	stringstream ssTarget;
 
 	long long llAmount = 0;
-/*
-	dRandom1 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability1 ;
-	for(unsigned int i = 0; i < vdProbabilitiesCumulative1.size()-1; i++){
-		if(vdProbabilitiesCumulative1.at(i) <= dRandom1 && vdProbabilitiesCumulative1.at(i+1) >+ dRandom1 ){
-			ss << i+1 << "_" ;
-			ssSource << i+1 << "_" ;
-			break;
-		}
-	}
-
-	dRandom2 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability2 ;
-	for(unsigned int i = 0; i < vdProbabilitiesCumulative2.size()-1; i++){
-		if(vdProbabilitiesCumulative2.at(i) <= dRandom2 && vdProbabilitiesCumulative2.at(i+1) >+ dRandom2 ){
-			ss << i+1 << ";";
-			ssSource << i+1;
-			float fMedian = i+1;
-			float fSigma = 3.0;
-			llAmount = box_muller(fMedian, fSigma);
-
-			if(llAmount < 0){
-				llAmount = llAmount * -1;
-			}
-
-			llAmount = llAmount * 100;
-
-			ss << llAmount << ";" ;
-			ssAmount << llAmount ;
-
-			break;
-		}
-	}
-
-	dRandom3 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability3 ;
-	for(unsigned int i = 0; i < vdProbabilitiesCumulative3.size()-1; i++){
-		if(vdProbabilitiesCumulative3.at(i) <= dRandom3 && vdProbabilitiesCumulative3.at(i+1) >= dRandom3 ){
-			ss << i+1 << "_" ;
-			ssTarget << i+1 << "_" ;
-			break;
-		}
-
-	}
-
-	dRandom4 = ((double)((rand() % (nHigh - nLow + 1)) + nLow)/nHigh) * cumulativeProbability4 ;
-	for(unsigned int i = 0; i < vdProbabilitiesCumulative4.size()-1; i++){
-		if(vdProbabilitiesCumulative4.at(i) <= dRandom4 && vdProbabilitiesCumulative4.at(i+1) >= dRandom4 ){
-			ss << i+1 << ";";
-			ssTarget << i+1 ;
-			break;
-		}
-	}
-
-
-
-	int nCluster = rand() % nClusters + 1;
-	ssSource << "_" << nCluster ;
-	float fRandom = ranf();
-	if(fRandom >= 0.5){
-			nCluster = rand() % nClusters + 1;
-	}
-	ssTarget << "_" << nCluster ;
-
-	int nRandom = rand() % nMembersPerGroup + 1;
-	ssSource << "(" << nRandom << ")" ;
-	nRandom = rand() % nMembersPerGroup + 1;
-	ssTarget << "(" << nRandom << ")" ;
-
-//----------------------
-*/
 	ssSource.str("");
 	ssTarget.str("");
 
@@ -856,7 +785,6 @@ IOU randomIOU(){
 	}
 
 	IOU iou = IOU(ssSource.str(), ssTarget.str(), llAmount);
-//	iou.display();
 
 	return iou;
 }
@@ -866,7 +794,6 @@ void addNode(string ID, string label, float size = 1 ){
 	stringstream ss;
 
 	size = (size/llMaxBalance) * 100;
-	//cout << "size:" << size << endl;
 
 	if(ID == THEWELL){
 			size = 100;
@@ -897,7 +824,6 @@ void changeNode(string ID, string label, float size = 1 ){
 	stringstream ss;
 
 	size = (size/llMaxBalance) * 100;
-//	cout << "size:" << size << endl;
 
 	if(ID == THEWELL){
 		size = 100;
