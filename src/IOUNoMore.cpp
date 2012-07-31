@@ -122,7 +122,7 @@ cycle StronglyConnected(string v, string w, long long amount);
 void cancelOutCycle(cycle cycle);
 bool validateNetwork();
 bool validateOwedFromTo(string a, string b);
-void checkForExpirations(int i);
+void checkForWithdrawals();
 void newTransaction(IOU iou	, bool checkCycle);
 IOU randomIOU();
 vector<cycle> possibleDebtorChains(string source);
@@ -515,17 +515,19 @@ int main() {
 
 	srand(time(0)); // set initial seed value to system clock
 
-	std::string strOutputFileName = "output.txt";
+	std::string strOutputFileName = "log.txt";
 	std::ofstream output(strOutputFileName.c_str());
+	output << "debtor;amount;creditor" << endl;
 
 	std::string strAnalysisFileName = "analysis.txt";
 	std::ofstream analysis(strAnalysisFileName.c_str());
+	analysis << "ID;Total amount;Total amount canceled out;Saturation;IOUs created;TransactionTime" << endl;
 
 	string input;
 	vector<string> vstrData;
 	vstrData.push_back(string("initial value"));
 
-	vector<IOU> vIOUdefault;
+	vector<IOU> vIOUinput;
 
 	//the program will loop until the exit command is given
 	while(vstrData.at(0) != string("exit")){
@@ -533,6 +535,7 @@ int main() {
 		cout << "to enter IOU:\t\t\t <source> <amount> <target>" << endl;
 		cout << "to enter random IOU:\t\t random <X>" << endl;
 		cout << "to do a search on an account:\t search <account>" << endl;
+		cout << "to use a txt file for input:\t input <file.txt>" << endl;
 		getline(cin, input);
 
 		//if no input is given , try again.
@@ -549,18 +552,25 @@ int main() {
 				nIOU = atoi(vstrData.at(1).c_str());
 			}
 		}
-		else if(vstrData.at(0) == string("default")){
+		else if(vstrData.at(0) == string("input")){
+			//this will read a txt file containing IOUs and use that data as input
+			//each line in the file must be the following format: debtor;amount;creditor
+			//where debtor and creditor are strings and amount is an integer value
+			std::string strInputFileName = vstrData.at(1);
+			std::ifstream inputFile(strInputFileName.c_str());
 
-			//this is a list of IOUs that will be issued in sequence if the user inputs: default
+			string strLine;
+			//read first line to skip headers
+			std::getline(inputFile, strLine);
 
-			vIOUdefault.push_back(IOU(string("A"), string("B"), 100));
-			vIOUdefault.push_back(IOU(string("B"), string("E"), 100));
-			vIOUdefault.push_back(IOU(string("C"), string("D"), 100));
-			vIOUdefault.push_back(IOU(string("D"), string("E"), 100));
-			vIOUdefault.push_back(IOU(string("E"), string("F"), 100));
-			vIOUdefault.push_back(IOU(string("E"), string("G"), 100));
-
-			nIOU = vIOUdefault.size();
+			//read each line and add to a vector of IOUs
+			while(std::getline(inputFile, strLine)){
+				cout << strLine << endl;
+				vector<string> vstrIOUData;
+				StringExplode(strLine, ";", &vstrIOUData);
+				vIOUinput.push_back(IOU(vstrIOUData.at(0), vstrIOUData.at(2), atoi(vstrIOUData.at(1).c_str())));
+			}
+			nIOU = vIOUinput.size();
 		}
 		else if(vstrData.at(0) == string("search")){
 			string strAccount = vstrData.at(1).c_str();
@@ -593,8 +603,8 @@ int main() {
 			if(vstrData.at(0) == string("random")){
 				iou = randomIOU();
 			}
-			else if(vstrData.at(0) == string("default")){
-				iou = vIOUdefault.at(i);
+			else if(vstrData.at(0) == string("input")){
+				iou = vIOUinput.at(i);
 			}
 			else{
 				iou = IOU(vstrData.at(0), vstrData.at(2), atof(vstrData.at(1).c_str()));
@@ -626,7 +636,7 @@ int main() {
 				analysis << (double) (finish - start)/CLOCKS_PER_SEC << ";" ;
 				analysis << endl;
 
-				checkForExpirations(llIOUID);
+				checkForWithdrawals();
 
 			}
 			else{
@@ -1299,7 +1309,7 @@ bool validateOwedFromTo(string a, string b){
 	return bOk;
 }
 
-void checkForExpirations(int i){
+void checkForWithdrawals(){
 
 	for( map<string,Account>::iterator it=mapAccounts.begin(); it!=mapAccounts.end(); ++it)
 	{
