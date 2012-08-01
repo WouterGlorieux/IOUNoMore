@@ -4,13 +4,13 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 CPP_SRCS += \
-../src/IOUNoMore.cpp 
+../src/IOUnetwork.cpp 
 
 OBJS += \
-./src/IOUNoMore.o 
+./src/IOUnetwork.o 
 
 CPP_DEPS += \
-./src/IOUNoMore.d 
+./src/IOUnetwork.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
