@@ -45,24 +45,27 @@ using namespace std;
  ********************************************************************/
 
 //some parameters for visualizing the network with a Gephi server
-//string strHost = string("localhost");	//ip-adres of the gephi server for visualizing the network
-string strHost = string("192.168.1.100");	//ip-adres of the gephi server for visualizing the network
+string strHost = string("localhost");	//ip-adres of the gephi server for visualizing the network
 bool bEnableGraph = false;					//set to true to enable visual representation of the network, set to false to increase processing speed
 bool bShowWell = false;						//setting this to false will not show the well in gephi to improve the visibility of the network.
 
 //some parameters for the behaviour of the network
 bool bEnableCycles = true;		//search for existing cycles and cancel them out
-bool bEnableChains = false;		//search for possible chains, warning: could cause a cascade of new IOUs each generating more possible chains
 
 //some parameters for statistical values of the network
 int nPopulation = 1000;			//total number of possible accounts
 
-//these values determine if the debtor or creditor in a random IOU are existing accounts or new accounts. value between 0 and 1
+//these values are the probability that the debtor or creditor in a random IOU are existing accounts or new accounts.
+//value between 0 and 1:
 float fExistingAccountDebtor = 0.9;
 float fExistingAccountCreditor = 0.9;
 
 // probability that a random IOU is a withdrawal
 float fWithdrawalProbability = 0.1;
+
+// probability that a random IOU is a deposit
+float fDepositProbability = 0.1;
+
 
 //some values for random number generation
 int nLow = 0;
@@ -102,7 +105,6 @@ int newTransaction(IOU iou	, bool checkCycle);
 IOU randomIOU();
 vector<cycle> possibleDebtorChains(string source);
 set<SearchResult> searchResults(vector<cycle> possibleChains);
-void optimalCycle(string source, string target, long long amount);
 
 float ranf();
 float box_muller(float m, float s);
@@ -200,7 +202,7 @@ public:
 			return (this->m_strTargetID < refParam.m_strTargetID);
 		}
 		else{
-			return (this->m_llAmount < refParam.m_llAmount);
+			return (this->m_llIOUID < refParam.m_llIOUID);
 		}
 	}
 };
@@ -269,8 +271,8 @@ public:
 		for (it = m_setIOUsGiven.begin();  it != m_setIOUsGiven.end();  it++)
 		{
         	if(it->m_strTargetID != strTmpTarget && (owedTo(it->m_strTargetID)-owedFrom(it->m_strTargetID)) > 0){
-        		//cout << "adding " << it->m_strTargetID << " to creditors" << endl;
-        		vstrCreditors.push_back(it->m_strTargetID);
+        		//add this account to the beginning of the vector to sort by age of the IOU
+        		vstrCreditors.insert(vstrCreditors.begin(), it->m_strTargetID);
         		strTmpTarget = it->m_strTargetID;
         	}
 		}
@@ -379,7 +381,32 @@ public:
 		//now check for existing cyles in the graph
 		if(checkCycle && bEnableCycles){
 			long long llCanceledOut = 0;
-			cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.getAmount());
+
+			//check if there is a 2nd degree cycle
+			if(owedFrom(iou.m_strTargetID) > 0){
+				cycle sCycle;
+				long long llValue = iou.getAmount() <= owedFrom(iou.m_strTargetID)? iou.getAmount() : owedFrom(iou.m_strTargetID);
+				sCycle.llValue = llValue;
+				vector<string> vstrCycle;
+				vstrCycle.push_back(iou.m_strSourceID);
+				vstrCycle.push_back(iou.m_strTargetID);
+				sCycle.vstrCycle = vstrCycle;
+				cout << "\tdetected cycle: " ;
+				for(unsigned int i = 0; i < sCycle.vstrCycle.size(); i++){
+					cout << sCycle.vstrCycle.at(i) << ", " ;
+				}
+				cout << endl << "\t\tvalue: " << sCycle.llValue  << "\tTotal value: " << sCycle.llValue * sCycle.vstrCycle.size() << endl;
+				cancelOutCycle(sCycle);
+
+				llCanceledOut += sCycle.llValue;
+				llTotalAmountCancelledOut += sCycle.llValue * sCycle.vstrCycle.size();
+				cout << "\t\t" << llCanceledOut << " of " << iou.getAmount() << " has been cancelled out." << endl;
+
+
+			}
+
+			//check for n-degree cycles
+			cycle sCycle = StronglyConnected(iou.m_strSourceID, iou.m_strTargetID, iou.getAmount()-llCanceledOut);
 			while(sCycle.vstrCycle.size() >= 2 && llCanceledOut < iou.getAmount()){
 				cout << "\tdetected cycle: " ;
 				for(unsigned int i = 0; i < sCycle.vstrCycle.size(); i++){
@@ -398,12 +425,6 @@ public:
 			balance();
 			if(bEnableGraph){
 				changeNode(m_ID, label(), getBalance());
-			}
-
-			//for some fraction of IOUs given, also check if there are chains that can be connected.
-			float fRandom = ranf();
-			if(bEnableChains && fRandom < 0.1 && iou.m_strSourceID != THEWELL && checkCycle){
-				optimalCycle(iou.m_strSourceID, iou.m_strTargetID, iou.m_llAmount-llCanceledOut);
 			}
 		}
 	}
@@ -595,14 +616,6 @@ int main() {
 				continue;
 			}
 
-			map<string, Account>::iterator it;
-			it = mapAccounts.find(iou.m_strSourceID);
-
-
-
-
-			cout << endl << i+1 << ": ";
-
 			if(iou.getAmount() != 0){
 				iou.m_llIOUID = llIOUID++;
 				newTransaction(iou, true);
@@ -663,11 +676,13 @@ int main() {
 //if the account that will give the IOU doesn't have enough balance , a IOU will be created from the well to this account for the amount needed.
 int newTransaction(IOU iou, bool checkCycle){
 
+
+
 	if(iou.m_strSourceID != THEWELL){
+		cout << "--------------------------------------------------" << endl;
 		cout << "New transaction: " << endl;
 		llTotalIOUamount += iou.m_llAmount;
 	}
-
 
 	map<string, Account>::iterator it;
 	it = mapAccounts.find(iou.m_strSourceID);
@@ -705,6 +720,11 @@ int newTransaction(IOU iou, bool checkCycle){
 	}
 
 	validateNetwork();
+
+	if(iou.m_strSourceID != THEWELL){
+		cout << "End of transaction." << endl;
+		cout << "--------------------------------------------------" << endl << endl;
+	}
 
 	return 0;
 }
@@ -758,6 +778,13 @@ IOU randomIOU(){
 		ssSource << vstrAccounts.at(nRandom);
 	}
 
+	fRandom = ranf();
+	if(fRandom <= fDepositProbability){
+		ssSource.str("");
+		ssSource << THEWELL;
+	}
+
+
 	vstrAccounts = Accounts(false);
 		if(vstrAccounts.size() != 0){
 			nRandom = rand() % vstrAccounts.size();
@@ -772,7 +799,7 @@ IOU randomIOU(){
 	}
 
 	fRandom = ranf();
-	if(fRandom <= fWithdrawalProbability){
+	if(fRandom <= fWithdrawalProbability && ssSource.str() != THEWELL){
 		ssTarget.str("");
 		ssTarget << THEWELL;
 	}
@@ -1107,79 +1134,6 @@ cycle reverseChain(cycle chain){
 
 
 	return sCycle;
-}
-
-//this function will combine every possible combinations of all debtorchains with creditorchains to find the most optimal one
-void optimalCycle(string source, string target, long long amount){
-	IOU iou = IOU(string(""), string(""), 0);
-
-	vector<cycle> vsPossibleDebtorChains = possibleDebtorChains(source);
-	vector<cycle> vsPossibleCreditorChains = possibleCreditorChains(target);
-
-	vector<cycle> vsPossibleChains;
-
-	for(unsigned int i = 0; i < vsPossibleDebtorChains.size(); i++){
-		cycle sTempChain;
-
-		for(unsigned int j = 0; j < vsPossibleCreditorChains.size(); j++){
-			sTempChain = vsPossibleDebtorChains.at(i);
-			cycle sTempCycle = vsPossibleCreditorChains.at(j);
-
-
-			if(sTempCycle.llValue != -1 && sTempCycle.llValue < sTempChain.llValue){
-				sTempChain.llValue = sTempCycle.llValue;
-			}
-			if(amount < sTempChain.llValue){
-				sTempChain.llValue = amount;
-			}
-
-			for(int k = sTempCycle.vstrCycle.size()-1; k >= 0; k--){
-				sTempChain.vstrCycle.push_back(sTempCycle.vstrCycle.at(k));
-			}
-			vsPossibleChains.push_back(sTempChain);
-		}
-	}
-
-
-	cycle sOptimalChain = reverseChain(bestChain(vsPossibleChains));
-
-
-		if(sOptimalChain.llValue != -1 && sOptimalChain.llValue >= sOptimalChain.vstrCycle.size() && sOptimalChain.vstrCycle.size() >= 6){
-			cout << "Optimal chain: " ;
-			for(unsigned int i = 0; i < sOptimalChain.vstrCycle.size(); i++){
-				cout << sOptimalChain.vstrCycle.at(i) << ", " ;
-			}
-			cout << endl << "LCD: " << sOptimalChain.llValue << "\tTotal value: " << sOptimalChain.llValue * sOptimalChain.vstrCycle.size() << endl;
-			cout << endl ;
-
-			iou.m_strSourceID = sOptimalChain.vstrCycle.at(0);
-			iou.m_strTargetID = sOptimalChain.vstrCycle.at(sOptimalChain.vstrCycle.size()-1);
-			iou.setAmount(sOptimalChain.llValue);
-
-
-			newTransaction(iou, false);
-			cancelOutCycle(sOptimalChain);
-
-			long long llCanceledOut = sOptimalChain.llValue;
-			llTotalAmountCancelledOut += sOptimalChain.llValue * sOptimalChain.vstrCycle.size();
-			cout << "\t\t" << llCanceledOut << " has been cancelled out." << endl;
-
-			newTransaction(IOU(iou.m_strTargetID, iou.m_strSourceID, iou.getAmount()), true);
-			long long llTotalPaid = 0;
-			for(unsigned int i = 1; i < sOptimalChain.vstrCycle.size()-1; i++){
-				string strSource = sOptimalChain.vstrCycle.at(i);
-				string strTarget = string("IOUnetwork");
-				long long amount = sOptimalChain.llValue/100;
-				llTotalPaid += amount;
-				cout << strSource << " --> " << strTarget << " : " << amount << endl;
-				newTransaction(IOU(strSource, strTarget, amount), true);
-			}
-			long long llShare = llTotalPaid/3;
-			newTransaction(IOU(string("IOUnetwork"), iou.m_strSourceID, llShare), true);
-			newTransaction(IOU(string("IOUnetwork"), iou.m_strTargetID, llShare), true);
-
-		}
-
 }
 
 //this function will check if the total amount of IOUs is equal to the absolute value of the balance of the well
