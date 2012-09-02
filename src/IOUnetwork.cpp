@@ -45,15 +45,17 @@ using namespace std;
  ********************************************************************/
 
 //some parameters for visualizing the network with a Gephi server
-string strHost = string("localhost");	//ip-adres of the gephi server for visualizing the network
-bool bEnableGraph = false;					//set to true to enable visual representation of the network, set to false to increase processing speed
-bool bShowWell = false;						//setting this to false will not show the well in gephi to improve the visibility of the network.
+//string strHost = string("localhost");	//ip-adres of the gephi server for visualizing the network
+string strHost = string("192.168.1.100");	//ip-adres of the gephi server for visualizing the network
+
+bool bEnableGraph = true;					//set to true to enable visual representation of the network, set to false to increase processing speed
+bool bShowWell = true;						//setting this to false will not show the well in gephi to improve the visibility of the network.
 
 //some parameters for the behaviour of the network
 bool bEnableCycles = true;		//search for existing cycles and cancel them out
 
 //some parameters for statistical values of the network
-int nPopulation = 1000;			//total number of possible accounts
+int nPopulation = 10;			//total number of possible accounts
 
 //these values are the probability that the debtor or creditor in a random IOU are existing accounts or new accounts.
 //value between 0 and 1:
@@ -154,7 +156,12 @@ public:
 	//< operator , needed to sort a set of searchResults
 	bool operator < (const SearchResult& refParam) const
 	{
-		return (this->m_llValue > refParam.m_llValue);
+		if(this->m_llValue != refParam.m_llValue){
+			return (this->m_llValue > refParam.m_llValue);
+		}
+		else{
+			return (this->m_strAccount > refParam.m_strAccount);
+		}
 	}
 };
 
