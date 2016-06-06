@@ -1,7 +1,7 @@
 #IOUNoMore
 
 
-##Proof-of-Concept for cancelling out cycles in a networked graph.  
+##Proof-of-Concept for cancelling out cycles in a network graph.  
 by Wouter Glorieux
 
 ###Donations
