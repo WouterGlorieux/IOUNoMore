@@ -1,5 +1,5 @@
 #IOUNoMore
-=========
+
 
 ##Proof-of-Concept for cancelling out cycles in a networked graph.  
 by Wouter Glorieux
